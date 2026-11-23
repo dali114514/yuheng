@@ -63,6 +63,32 @@ def log(text):
     print(text)
 
 
+
+# ---------------------------------------------------------------- 定时任务「今天做过没有」：记在文件里，重启机器人也不会再跑一遍
+JOBS_FILE = HERE / "data" / ".bot_jobs.json"
+
+
+def job_done(name, day):
+    try:
+        import json
+        return json.loads(JOBS_FILE.read_text(encoding="utf-8")).get(name) == str(day)
+    except Exception:
+        return False
+
+
+def job_mark(name, day):
+    import json
+    try:
+        d = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        d = {}
+    d[name] = str(day)
+    try:
+        JOBS_FILE.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        log(f"记录定时任务状态失败：{e!r}")
+
+
 def settings():
     cfg = mr.load_config()
     s = dict(cfg.get("Discord机器人") or {})
@@ -320,8 +346,15 @@ async def auto_grok_loop(client):
                 now = dt.datetime.now(ET)
                 hh, mm = [int(x) for x in str(g.get("报告时间_美东") or "09:00").split(":")]
                 due = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-                if now.weekday() < 5 and 0 <= (now - due).total_seconds() < 900 and now.date() not in sent:
+                try:
+                    import grokscan
+                    gday = (grokscan.load_cache().get("latest") or {}).get("day")
+                except Exception:
+                    gday = None
+                if (now.weekday() < 5 and 0 <= (now - due).total_seconds() < 900 and now.date() not in sent
+                        and not job_done("grok", now.date()) and gday != str(now.date())):
                     sent.add(now.date())
+                    job_mark("grok", now.date())
                     async with GROK_LOCK:
                         await _grok_publish()
         except Exception as e:
@@ -361,8 +394,10 @@ async def auto_night_loop(client):
                 now = dt.datetime.now(tz)
                 due = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
                 et_day = now.astimezone(ZoneInfo("America/New_York")).weekday()
-                if now >= due and (now - due).total_seconds() < 600 and sent_on != now.date() and et_day < 5:
+                if (now >= due and (now - due).total_seconds() < 600 and sent_on != now.date() and et_day < 5
+                        and not job_done("night", now.date())):
                     sent_on = now.date()
+                    job_mark("night", now.date())
                     target = channel_for(s, "快讯")
                     ch = client.get_channel(int(target)) if target else None
                     if ch is None:
@@ -501,7 +536,8 @@ async def auto_pack_loop(client):
             now = dt.datetime.now(ET)
             hh, mm_ = [int(x) for x in str(a.get("时间") or "08:45").split(":")]
             due = now.replace(hour=hh, minute=mm_, second=0, microsecond=0)
-            if a.get("启用", True) and now.weekday() < 5 and now >= due and now.hour < 16 and done != now.date():
+            if (a.get("启用", True) and now.weekday() < 5 and now >= due and now.hour < 16 and done != now.date()
+                    and not job_done("pack", now.date())):
                 g = (cfg.get("Grok盘前") or {})
                 try:
                     import grokscan
@@ -512,6 +548,7 @@ async def auto_pack_loop(client):
                     await asyncio.sleep(30)
                     continue
                 done = now.date()
+                job_mark("pack", now.date())
                 import today
                 async with PACK_LOCK:
                     text, short = await asyncio.to_thread(today.make_full, cfg, log, False, True)
@@ -559,8 +596,10 @@ async def auto_weekly_loop(client):
                 hh, mm_ = [int(x) for x in str(a.get("时间") or "17:00").split(":")]
                 now = dt.datetime.now(ET)
                 due = now.replace(hour=hh, minute=mm_, second=0, microsecond=0)
-                if now.weekday() == 4 and now >= due and (now - due).total_seconds() < 3600 and sent_on != now.date():
+                if (now.weekday() == 4 and now >= due and (now - due).total_seconds() < 3600 and sent_on != now.date()
+                        and not job_done("weekly", now.date())):
                     sent_on = now.date()
+                    job_mark("weekly", now.date())
                     target = channel_for(s, "报告")
                     ch = client.get_channel(int(target)) if target else None
                     if ch is None:
@@ -630,6 +669,7 @@ async def do_review(msg, channel=None):
         ch = channel or msg.channel
         for part in _chunks(text):
             await ch.send(part)
+        return text
 
 
 async def do_backfill(msg):
@@ -666,8 +706,9 @@ async def do_backfill(msg):
 
 
 async def auto_close_loop(client):
-    """收盘后（默认美东 16:20，周一到周五）自动做收盘复盘，发到 #报告。"""
-    sent_on = None
+    """收盘后（默认美东 16:20，周一到周五）自动做收盘复盘，发到 #报告。
+    失败（网络断、OpenD 断、K 线没入库、Discord 发不出去）就 5 分钟后再试，收盘后 3 小时内一直重试到成功。"""
+    sent_on, next_try = None, 0.0
     while True:
         try:
             _, s = settings()
@@ -676,15 +717,26 @@ async def auto_close_loop(client):
                 hh, mm_ = [int(x) for x in str(a.get("时间") or "16:20").split(":")]
                 now = dt.datetime.now(ET)
                 due = now.replace(hour=hh, minute=mm_, second=0, microsecond=0)
-                if now.weekday() < 5 and now >= due and (now - due).total_seconds() < 1800 and sent_on != now.date():
+                if (now.weekday() < 5 and now >= due and (now - due).total_seconds() < 3 * 3600 and sent_on != now.date()
+                        and not job_done("close", now.date()) and time.time() >= next_try):
                     sent_on = now.date()
-                    target = channel_for(s, "报告")
-                    ch = client.get_channel(int(target)) if target else None
-                    if ch is None:
-                        log("自动收盘复盘：找不到 #报告 频道")
-                    else:
-                        await do_review(None, channel=ch)
-                        log(f"自动收盘复盘已发送到 #{ch.name}")
+                    job_mark("close", now.date())
+                    ok = False
+                    try:
+                        target = channel_for(s, "报告")
+                        ch = client.get_channel(int(target)) if target else None
+                        if ch is None:
+                            log("自动收盘复盘：找不到 #报告 频道")
+                            ok = True                         # 设置问题，重试也没用
+                        else:
+                            text = await do_review(None, channel=ch) or ""
+                            ok = not any(x in text for x in ("✗ K 线入库", "K 线没有入库", "1 分钟 0 根"))
+                            log(f"自动收盘复盘已发送到 #{ch.name}" + ("" if ok else "（K 线没入库，5 分钟后重试）"))
+                    except Exception as e:
+                        log(f"自动收盘复盘出错：{e!r}（5 分钟后重试）")
+                    if not ok:
+                        sent_on, next_try = None, time.time() + 300
+                        job_mark("close", "")
         except Exception as e:
             log(f"自动收盘复盘出错：{e!r}")
         await asyncio.sleep(30)
@@ -704,8 +756,9 @@ async def auto_brief_loop(client):
                 due = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
                 us_day = now.astimezone(ZoneInfo("America/New_York")).weekday() < 5
                 if (now >= due and (now - due).total_seconds() < 600 and sent_on != now.date()
-                        and (us_day or not a.get("只在美股交易日", True))):
+                        and (us_day or not a.get("只在美股交易日", True)) and not job_done("brief", now.date())):
                     sent_on = now.date()
+                    job_mark("brief", now.date())
                     target = channel_for(s, "快讯") or next(
                         (str(c).strip() for c in (s.get("允许的频道ID") or []) if str(c).strip()), None)
                     ch = client.get_channel(int(target)) if target else None

@@ -195,9 +195,9 @@ def check(plan, deals, pnl, q, day, now):
             sgn = 1 if d["side"] in ("BUY", "SELL_SHORT") else -1 if d["side"] in ("SELL", "BUY_BACK") else 0
             net[d["code"]] = max(0.0, net.get(d["code"], 0.0) + sgn * float(d.get("qty") or 0))
             peak[d["code"]] = max(peak.get(d["code"], 0.0), net[d["code"]])
-        for code, q in peak.items():
-            if q > float(mq):
-                alerts.append(("超过张数", code, f"{code} 同时拿了 {q:g} 张，今天每笔最多 {mq} 张（按大盘行情定的）", True))
+        for code, held in peak.items():               # 别用 q：q 是行情
+            if held > float(mq):
+                alerts.append(("超过张数", code, f"{code} 同时拿了 {held:g} 张，今天每笔最多 {mq} 张（按大盘行情定的）", True))
     for k, o in sorted(opens.items(), key=lambda x: x[1]["time"]):
         w = names.get(o["und"])
         if lim.get("只做名单内") and w is None:

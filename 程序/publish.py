@@ -122,7 +122,7 @@ def collect():
     return files
 
 
-def prepare(v):
+def prepare(v, dry=False):
     """准备 .发布仓库：没有就克隆；第一次把原来的 main 存到 v4-optbot 分支。"""
     if not (WORK / ".git").exists():
         print(f"克隆 {REPO} → {WORK.name}")
@@ -130,7 +130,7 @@ def prepare(v):
     sh("git", "config", "user.name", NAME, cwd=WORK)
     sh("git", "config", "user.email", EMAIL, cwd=WORK)
     sh("git", "fetch", "--all", "--tags", cwd=WORK)
-    if sh("git", "tag", "-l", f"v{v}", cwd=WORK, capture=True):
+    if not dry and sh("git", "tag", "-l", f"v{v}", cwd=WORK, capture=True):
         raise SystemExit(f"✗ v{v} 已经发布过了：先改 VERSION（新功能 +0.1、小改 +0.0.1）和 CHANGELOG.md")
     remote_branches = sh("git", "branch", "-r", cwd=WORK, capture=True)
     first = f"origin/{OLD_BRANCH}" not in remote_branches
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     if "--dry-run" in sys.argv:          # 只生成到 .发布仓库 并做安全检查，不提交不推送
         v = version()
         notes(v)
-        first = prepare(v)
+        first = prepare(v, dry=True)
         build_tree(first)
         scan()
         print(sh("git", "status", "--short", cwd=WORK, capture=True)[:3000])

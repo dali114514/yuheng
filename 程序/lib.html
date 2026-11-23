@@ -821,7 +821,7 @@ function intradayPlaybookHtml(P) {
   const lvc = { "检验通过": "good", "试仓级": "warn" };
   return `
     <div class="sub" style="margin:4px 0 8px">主线：1 分钟K、9:36–11:00 开仓、期权（平值、约 3 天到期，按交易时间算时间损耗，扣买卖价差）。
-      先看今天是哪种开盘，再走对应分支；不在表里的「股票 × 开盘」= 不做。${it.live ? "张数和每张亏损按 moomoo 实时 Delta 算。" : "这次没读到实时期权（OpenD 没连上或不在盘前），每张亏损要盘中再算。"}</div>
+      先看今天是哪种开盘，再走对应分支；不在表里的「股票 × 开盘」= 不做。${!it.live ? "这次没读到实时期权（OpenD 没连上），每张亏损要盘中再算。" : (it.stocks.some(s => s.option && s.option.call && s.option.call.est) ? "期权还没开盘：每张亏损是用盘前股价和期权隐含波动率估算的 Delta 算的，开盘后以实时为准。" : "每张亏损按 moomoo 实时 Delta 算。")}</div>
     <div class="scroll"><table style="min-width:1000px"><tr><th>如果</th><th>就做</th><th>止损</th><th>级别 / 张数</th><th class="num">样本内 / 外（每笔权利金）</th><th class="num">每张平均（现价折算）</th><th>跨股票（随机）</th><th class="num">止损一次每张约亏</th></tr>
       ${rows.map(([s, b]) => `<tr>
         <td class="nw"><b>${esc(s.code)}</b> ${esc(GAPN[b.gap])}${s.gap_now_class === b.gap ? ' <span class="mini">盘前就是</span>' : ""}</td>

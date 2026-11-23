@@ -1269,12 +1269,14 @@ def run(codes=None, update_vix=True, log=print) -> dict:
     # 重新汇总：读全部已存的结果（只重算几只时，其他股票用上次的结果）
     syms = {}
     for f in sorted(OUT_DIR.glob("*.json")):
-        if f.name == "index.json":
+        if f.name in ("index.json", "playbook.json"):
             continue
         try:
             y = json.loads(f.read_text("utf-8"))
         except Exception:
             continue
+        if not isinstance(y, dict) or "strategies" not in y or "code" not in y:
+            continue                              # 不是单只股票的结果（例如今日预案）
         if y.get("code") in skipped or (data and codes is None and y.get("code") not in todo):
             continue                              # 全量重算时，不在库里的旧股票不再汇总
         syms[y["code"]] = _index_entry(y)

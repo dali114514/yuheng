@@ -26,6 +26,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import sys
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -283,12 +284,24 @@ def live_options(codes, log=print):
                 if ret != ft.RET_OK:
                     continue
                 o = {"spot": round(spot, 2), "expiry": exp, "strike": float(k)}
+                now_et = dt.datetime.now(ZoneInfo("America/New_York"))
+                pre = now_et.weekday() >= 5 or not (9 * 60 + 30 <= now_et.hour * 60 + now_et.minute < 16 * 60)
                 for _, r in q.iterrows():
                     side = "call" if str(r.get("option_type")).upper().startswith("C") else "put"
                     bid, ask, last = (float(r.get(x) or 0) for x in ("bid_price", "ask_price", "last_price"))
                     mid = (bid + ask) / 2 if bid and ask else last
-                    o[side] = {"price": round(mid, 2), "bid": bid, "ask": ask, "delta": float(r.get("option_delta") or 0),
-                               "gamma": float(r.get("option_gamma") or 0), "iv": float(r.get("option_implied_volatility") or 0)}
+                    iv = float(r.get("option_implied_volatility") or 0)
+                    leg = {"price": round(mid, 2), "bid": bid, "ask": ask, "delta": float(r.get("option_delta") or 0),
+                           "gamma": float(r.get("option_gamma") or 0), "iv": iv, "est": False}
+                    if pre and iv > 0:
+                        # 期权盘前不交易：moomoo 的期权价和 Delta 还停在上一个收盘，股价却已经跳空。
+                        # 用它的隐含波动率 + 盘前股价重新算（Black-Scholes），标成「盘前估算」
+                        T = max(((dt.date.fromisoformat(exp) - now_et.date()).days + 0.3) / 365, 1 / 365)
+                        price, dlt, gam = _bs_greeks(spot, float(k), T, iv / 100, side == "call")
+                        half = max(0.0, (ask - bid) / 2) if bid and ask else 0.0
+                        leg.update(price=round(price, 2), delta=dlt, gamma=gam, bid=round(max(price - half, 0), 2),
+                                   ask=round(price + half, 2), est=True)
+                    o[side] = leg
                 out[c] = o
                 _t.sleep(2.5)                         # 期权链接口有频率限制
             except Exception:
@@ -296,6 +309,18 @@ def live_options(codes, log=print):
     finally:
         mm.close()
     return out
+
+
+def _bs_greeks(S, K, T, iv, call):
+    """Black-Scholes（r = 0）：价格、Delta、Gamma。"""
+    import math
+    sd = iv * math.sqrt(T)
+    d1 = (math.log(S / K) + 0.5 * sd * sd) / sd
+    N = lambda x: 0.5 * (1 + math.erf(x / math.sqrt(2)))
+    n1 = math.exp(-0.5 * d1 * d1) / math.sqrt(2 * math.pi)
+    d2 = d1 - sd
+    price = S * N(d1) - K * N(d2) if call else K * N(-d2) - S * N(-d1)
+    return price, (N(d1) if call else N(d1) - 1), n1 / (S * sd)
 
 
 def per_contract_loss(opt_leg, dist):
@@ -436,7 +461,8 @@ def intraday_md(it, risk):
         opt = s.get("option")
         live = ""
         if opt and opt.get("call") and opt.get("put"):
-            live = (f"；实时 {opt['expiry']} 到期 {opt['strike']:g} 平值：看涨 ${opt['call']['price']:.2f}（Δ {opt['call']['delta']:+.2f}），"
+            tag = "盘前估算（期权还没开盘，按盘前股价和隐含波动率算）" if opt["call"].get("est") else "实时"
+            live = (f"；{tag} {opt['expiry']} 到期 {opt['strike']:g} 平值：看涨 ${opt['call']['price']:.2f}（Δ {opt['call']['delta']:+.2f}），"
                     f"看跌 ${opt['put']['price']:.2f}（Δ {opt['put']['delta']:+.2f}）")
         L.append(f"- **{s['code']}**{now}{' · 新股，借用其他股票的检验' if s['borrowed'] else ''}{live}")
         for b in s["branches"]:
