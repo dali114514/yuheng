@@ -46,6 +46,15 @@ DEFAULT = {
 }
 
 
+
+def _ver():
+    """当前版本号（项目根目录 VERSION）。"""
+    try:
+        import version
+        return version.get()
+    except Exception:
+        return "?"
+
 def settings(cfg):
     s = dict(DEFAULT)
     s.update(cfg.get("网站分享") or {})
@@ -174,7 +183,7 @@ def page(title, body, prefix=""):
 <meta name="robots" content="noindex,nofollow">
 <title>{html.escape(title)}</title><style>{CSS}</style></head>
 <body><div class="wrap">
-<nav><b>玉衡5.0</b><a href="{prefix}index.html">最新报告</a><a href="{prefix}history.html">历史报告</a><a href="{prefix}alerts.html">盘中提醒</a></nav>
+<nav><b>玉衡5.0 · v{_ver()}</b><a href="{prefix}index.html">最新报告</a><a href="{prefix}history.html">历史报告</a><a href="{prefix}alerts.html">盘中提醒</a></nav>
 {body}
 <p class="mut">报告按固定规则生成，仅用于辅助复盘，不构成投资建议。</p>
 </div></body></html>"""
@@ -374,7 +383,7 @@ def after_report(cfg, docx_path, A=None, top_lines=None, log=print):
             lines.append(f"[{lvl}] {txt}")
         lines += list(top_lines or [])
         try:
-            if push(s, f"玉衡5.0｜新报告 {dt.datetime.now():%m-%d %H:%M}", "\n".join(lines), link or site_url(s),
+            if push(s, f"玉衡5.0 v{_ver()}｜新报告 {dt.datetime.now():%m-%d %H:%M}", "\n".join(lines), link or site_url(s),
                     hook_key="报告Webhook地址"):
                 log("  ✓ 已推送到工作群")
         except Exception as e:
@@ -414,7 +423,7 @@ def test():
     if not s.get("启用"):
         print("「设置.json → 网站分享 → 启用」还是 false。填好 Cloudflare 信息后改成 true 再试。")
         return
-    reports = sorted(list(REPORT_DIR.glob("玉衡5.0_*.docx")) + list(REPORT_DIR.glob("玉衡5.0_*.docx")), key=lambda p: p.stat().st_mtime)
+    reports = sorted(set(REPORT_DIR.glob("赚钱小助手_*.docx")) | set(REPORT_DIR.glob("玉衡5.0_*.docx")), key=lambda p: p.stat().st_mtime)
     if not reports:
         print("「报告」文件夹里还没有报告，请先双击「玉衡5.0.command」生成一份。")
         return

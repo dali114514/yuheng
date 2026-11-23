@@ -111,6 +111,15 @@ DEFAULT_CONFIG = {
 
 
 # ---------------------------------------------------------------- 配置
+
+def _ver():
+    """当前版本号（项目根目录 VERSION）。"""
+    try:
+        import version
+        return version.get()
+    except Exception:
+        return "?"
+
 def load_config():
     def merge(default, user):
         out = dict(default)
@@ -776,7 +785,7 @@ def build_doc(A, data, src, out_path, extra=None, stock_src="", top_lines=None):
 
     # 标题
     tp = doc.add_paragraph(style="Title")
-    run_font(tp.add_run("玉衡5.0 日报"))
+    run_font(tp.add_run(f"玉衡5.0 日报 · v{_ver()}"))
     para(f"数据截至 {last_date}（最近交易日收盘 / 盘中最新）　·　生成于 {now:%Y-%m-%d %H:%M}", color=GREY, size=9)
     if now.date() > last_date and now.weekday() >= 5:
         para("今天是周末，数据为上一个交易日。", color=GREY, size=9)
@@ -907,7 +916,7 @@ def build_doc(A, data, src, out_path, extra=None, stock_src="", top_lines=None):
 # ---------------------------------------------------------------- 主程序
 def main():
     print("=" * 46)
-    print("  玉衡5.0：正在拉取数据……")
+    print(f"  玉衡5.0 v{_ver()}：正在拉取数据……")
     print("=" * 46)
     cfg = load_config()
     REPORT_DIR.mkdir(parents=True, exist_ok=True)

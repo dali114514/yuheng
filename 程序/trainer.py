@@ -552,7 +552,8 @@ def main(open_browser=True):
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     url = f"http://127.0.0.1:{PORT}/"
     print("=" * 50)
-    print("  玉衡5.0 · 盘感训练")
+    import version
+    print(f"  玉衡5.0 v{version.get()} · 盘感训练")
     print(f"  浏览器打开 {url}")
     print("  关掉这个窗口即停止")
     print("=" * 50)

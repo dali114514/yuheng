@@ -14,5 +14,8 @@ plutil -replace CFBundleIdentifier -string "local.zhuanqian.app" "$P"
 plutil -replace CFBundleName -string "玉衡5.0" "$P"
 plutil -replace CFBundleDisplayName -string "玉衡5.0" "$P" 2>/dev/null || plutil -insert CFBundleDisplayName -string "玉衡5.0" "$P"
 plutil -replace NSMicrophoneUsageDescription -string "语音问答：拍两下 Mac 后听你的问题" "$P"
+V="$(cat VERSION 2>/dev/null || echo 5.0.0)"
+plutil -replace CFBundleShortVersionString -string "$V" "$P" 2>/dev/null || plutil -insert CFBundleShortVersionString -string "$V" "$P"
+plutil -replace CFBundleVersion -string "$V" "$P" 2>/dev/null || plutil -insert CFBundleVersion -string "$V" "$P"
 codesign --force --deep --sign - "$APP" 2>/dev/null || true
 echo "✓ 已生成 $APP"

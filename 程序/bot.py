@@ -89,6 +89,11 @@ def job_mark(name, day):
         log(f"记录定时任务状态失败：{e!r}")
 
 
+def _ver():
+    import version
+    return version.get()
+
+
 def settings():
     cfg = mr.load_config()
     s = dict(cfg.get("Discord机器人") or {})
@@ -109,7 +114,7 @@ def opend_running():
 
 
 def latest_report():
-    files = sorted(list(REPORT_DIR.glob("玉衡5.0_*.docx")) + list(REPORT_DIR.glob("玉衡5.0_*.docx")), key=lambda p: p.stat().st_mtime)
+    files = sorted(set(REPORT_DIR.glob("赚钱小助手_*.docx")) | set(REPORT_DIR.glob("玉衡5.0_*.docx")), key=lambda p: p.stat().st_mtime)
     return files[-1] if files else None
 
 
@@ -142,7 +147,7 @@ def wrong_channel(msg, s, cmd):
 def help_text(s):
     r = route(s)
     ch = lambda k: f"<#{r[k][0]}>" if r.get(k) else "任意频道"
-    return ("**玉衡5.0 机器人** 常用命令（直接发文字）：\n"
+    return (f"**玉衡5.0 机器人 · v{_ver()}** 常用命令（直接发文字）：\n"
             "· `简报`：一键生成今天的盘前报告（新闻、夜盘、Grok、Reddit、全部自选股、Kill Zone 数据），精简版回到这里（几分钟）\n"
             "· `盘感 NVDA`：这只股票现在的盘感判断——历史相似情形的概率 + 追 / 等 / 观察 / 不做（盘中用，几秒）\n"
             "· `复盘`：收盘复盘　· `周报`：本周总结　· `状态`：看连接情况\n"
@@ -200,7 +205,7 @@ async def do_report(msg, discord):
         if sh.get("启用") and "✓ 已发布" in text:
             key = re.search(r"(\d{4}-\d{2}-\d{2}_\d{4})", after.stem)
             link = f"\n网页版：https://{sh.get('网站项目名')}.pages.dev/r/{key.group(1)}.html" if key else ""
-        body = f"**玉衡5.0｜{dt.datetime.now():%m-%d %H:%M} 报告**\n" + "\n".join(lines[:8]) + link
+        body = f"**玉衡5.0 v{_ver()}｜{dt.datetime.now():%m-%d %H:%M} 报告**\n" + "\n".join(lines[:8]) + link
         body += "\n_仅供参考，不构成投资建议。_"
         await msg.reply(body[:1900], file=discord.File(str(after)))
         log(f"已发送报告 {after.name} 给 {msg.author}")
@@ -447,7 +452,7 @@ async def do_status(msg):
     r = latest_report()
     rep = "还没有"
     if r:
-        rep = f"{r.stem.replace('玉衡5.0_', '').replace('玉衡5.0_', '')}（{dt.datetime.fromtimestamp(r.stat().st_mtime):%m-%d %H:%M} 生成）"
+        rep = f"{r.stem.replace('赚钱小助手_', '').replace('玉衡5.0_', '')}（{dt.datetime.fromtimestamp(r.stat().st_mtime):%m-%d %H:%M} 生成）"
     import today
     day = today.session_day()
     p = today.load_plan(day)
@@ -872,7 +877,7 @@ def main():
             await msg.reply("❌ 出错了，请让管理员看一下电脑上的「报告/机器人日志.txt」。")
 
     print("=" * 50)
-    print("  玉衡5.0 · Discord 机器人（运行中）")
+    print(f"  玉衡5.0 v{_ver()} · Discord 机器人（运行中）")
     print("  关掉这个窗口或按 Control+C 即停止")
     print("=" * 50)
     try:

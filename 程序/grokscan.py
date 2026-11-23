@@ -64,6 +64,15 @@ DEFAULT = {
 PRICE = {"in": 2.0 / 1e6, "out": 6.0 / 1e6, "post": 5.0 / 1000}   # 第三方整理价格，以 docs.x.ai 为准
 
 
+
+def _ver():
+    """当前版本号（项目根目录 VERSION）。"""
+    try:
+        import version
+        return version.get()
+    except Exception:
+        return "?"
+
 def settings(cfg):
     s = dict(DEFAULT)
     s.update(cfg.get("Grok盘前") or {})
@@ -524,7 +533,7 @@ def word_report(res, out_dir):
     at = dt.datetime.fromisoformat(res["at"])
     posts = res["posts"]
     sd = sides(posts)
-    doc.add_heading("玉衡5.0 · Grok 盘前报告", 0)
+    doc.add_heading(f"玉衡5.0 v{_ver()} · Grok 盘前报告", 0)
     para(f"覆盖时间：{since:%m-%d %H:%M} → {at:%m-%d %H:%M}（美东）　·　帖子 {len(posts)} 条，来自 {len({p['handle'] for p in posts})} 个账号",
          color=GREY, size=9)
     para("事实部分（谁发了什么、时间、链接、谁看涨谁看跌）由程序从已核实的帖子汇总；分析部分由 Grok 只根据这些帖子撰写。"

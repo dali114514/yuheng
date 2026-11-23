@@ -27,6 +27,15 @@ US_WORDS = ["美联储", "鲍威尔", "FOMC", "降息", "加息", "美国", "美
             "零售销售", "GDP", "纳指", "标普", "道指", "美股", "财政部", "收益率", "通胀", "就业", "初请", "原油", "沃勒", "联储"]
 
 
+
+def _ver():
+    """当前版本号（项目根目录 VERSION）。"""
+    try:
+        import version
+        return version.get()
+    except Exception:
+        return "?"
+
 def _pct(x):
     return "—" if x is None else f"{x:+.2f}%"
 
@@ -257,7 +266,7 @@ def build(cfg):
     codes = [c for c in q] or watch_codes_all(cfg)
     ov = overview()
     rd = reddit_block(cfg, codes, items)
-    L = [f"# 盘前资料 · {day}（美东）", "",
+    L = [f"# 盘前资料 · {day}（美东）", "", f"玉衡5.0 v{_ver()} 生成", "",
          f"程序整理于美东 {now:%H:%M}（悉尼 {now.astimezone(SYD):%H:%M}）。只放事实，不下结论；结论在和 Claude 讨论后写进「打法和纪律.md」。", "",
          "目录：一、大盘和日程　二、夜盘　三、全部自选股　四、Kill Zone 数据　五、C2 打法分股票回测　六、个股消息"
          "　七、散户情绪　八、推特　九、宏观要闻", ""]

@@ -53,6 +53,15 @@ DEFAULTS = {
 }
 
 
+
+def _ver():
+    """当前版本号（项目根目录 VERSION）。"""
+    try:
+        import version
+        return version.get()
+    except Exception:
+        return "?"
+
 def settings():
     p = BASE / "设置.json"
     cfg = json.loads(p.read_text(encoding="utf-8"))
@@ -491,7 +500,7 @@ def _p(v, d=1):
 def to_md(res):
     m = res["market"]
     r = m["risk"] or {}
-    L = [f"# 今日预案 · {res['day']}", "",
+    L = [f"# 今日预案 · {res['day']}", "", f"玉衡5.0 v{_ver()} 生成", "",
          f"按《交易的本质》的三个问题，从玉衡策略库里按「现在的行情」挑策略。日线数据截至 {res['data_date']} 收盘，生成于 {res['generated'].replace('T', ' ')}。",
          "主线是日内策略库（你的打法：1 分钟K、9:36–11:00 开仓、期权）：按今天的开盘类型走哪个分支；日线只当背景和风险上限。", ""]
     go = [s for s in res["stocks"] if s["level"] == "检验通过"]

@@ -814,7 +814,8 @@ def main(open_window=True, supervise=True):
         threading.Thread(target=SUP.run, daemon=True).start()
     if open_window:
         threading.Timer(1.0, lambda: open_url(url, app=True)).start()
-    print(f"玉衡5.0 控制台：{url}")
+    import version
+    print(f"玉衡5.0 v{version.get()} 控制台：{url}")
     srv.serve_forever()
 
 

@@ -195,6 +195,18 @@ def scan():
     print(f"安全检查通过：查了 {len(sec)} 个密钥值和常见令牌格式")
 
 
+def stamp_app(v):
+    """本机 App 的版本号（Finder「显示简介」里看到的）跟 VERSION 对齐。App 不上传。"""
+    app = ROOT / "玉衡5.0.app"
+    plist = app / "Contents" / "Info.plist"
+    if not plist.exists():
+        return
+    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
+        if subprocess.run(["plutil", "-replace", key, "-string", v, str(plist)], capture_output=True).returncode != 0:
+            subprocess.run(["plutil", "-insert", key, "-string", v, str(plist)], capture_output=True)
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], capture_output=True)
+
+
 def main():
     if not shutil.which(GH) and not Path(GH).exists():
         raise SystemExit("✗ 没有 GitHub 命令行（brew install gh）")
@@ -202,6 +214,7 @@ def main():
         raise SystemExit("✗ GitHub 命令行还没登录：在终端运行 gh auth login")
     v = version()
     msg = notes(v)
+    stamp_app(v)
     first = prepare(v)
     build_tree(first)
     scan()
