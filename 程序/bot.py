@@ -590,6 +590,34 @@ async def auto_news_loop(client):
         await asyncio.sleep(60)
 
 
+async def auto_newsalert_loop(client):
+    """重大新闻马上推送（newsalert.py）：美东工作日 4:00–20:00，每 90 秒看一次华尔街见闻快讯，重大的发到 #快讯，并马上归档。"""
+    import newsalert
+    while True:
+        wait = 90
+        try:
+            cfg, s = settings()
+            na = newsalert.settings(cfg)
+            wait = max(30, int(na.get("间隔_秒") or 90))
+            if na.get("启用", True) and newsalert.in_window(na):
+                msgs = await asyncio.to_thread(newsalert.scan, cfg, log)
+                if msgs:
+                    target = channel_for(s, na.get("频道") or "快讯") or channel_for(s, "快讯")
+                    ch = client.get_channel(int(target)) if target else None
+                    for m in msgs:
+                        if ch:
+                            await ch.send(m[:1990])
+                    log(f"重大新闻推送：{len(msgs)} 条" + ("" if ch else "（找不到 #快讯 频道，没发出去）"))
+                    try:                              # 马上归档，不用等 20 分钟那一轮
+                        import news
+                        await asyncio.to_thread(news.collect, cfg, 2, None, ("wscn",))
+                    except Exception as e:
+                        log(f"重大新闻归档出错：{e!r}")
+        except Exception as e:
+            log(f"重大新闻推送出错：{e!r}")
+        await asyncio.sleep(wait)
+
+
 async def auto_weekly_loop(client):
     """每周五美东 17:00（收盘复盘之后）自动发周报到 #报告。"""
     sent_on = None
@@ -818,6 +846,7 @@ def main():
             client.loop.create_task(auto_close_loop(client))
             client.loop.create_task(auto_weekly_loop(client))
             client.loop.create_task(auto_news_loop(client))
+            client.loop.create_task(auto_newsalert_loop(client))
             client.loop.create_task(auto_pack_loop(client))
         for g in client.guilds:
             chans = ", ".join(f"#{c.name}({c.id})" for c in g.text_channels
