@@ -1,0 +1,125 @@
+@import url("https://fonts.googleapis.com/css2?family=Zhi+Mang+Xing&display=swap");
+/* 玉衡主题：控制台（8760）、盯盘界面（8767）、盘感训练（8765）共用。只改外观，不改功能。
+   配色、字体、标志来自玉衡（yuheng 仓库 optbot/static/dashboard.html）。替换了原来的赛博像素主题 cyber.css。
+   各页面原有的变量名（--bg --panel --line --up --down ……）在这里映射到玉衡的配色。 */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-1-soft: rgba(42,120,214,0.12);
+  --good: #006300; --good-mark: #0ca30c; --warning: #fab219; --critical: #d03b3b; --chip-bg: #f1f0ec;
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100; --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #6250d6;
+  /* 旧变量 → 玉衡配色 */
+  --bg: var(--page); --panel: var(--surface); --line: var(--grid); --chip: var(--chip-bg); --hide: var(--chip-bg);
+  --accent: var(--series-1); --ok: #0a8a0a; --warn: #c98500; --bad: var(--critical);
+  --up: #0a8a0a; --down: var(--critical); --vwap: #eb6834; --box: var(--series-1-soft); --kz: rgba(42,120,214,0.07);
+  --a: #0a8a0a; --b: #c98500; --c: var(--muted); --x: var(--critical);
+  --yh-font: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --yh-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-1-soft: rgba(57,135,229,0.18);
+    --good: #0ca30c; --good-mark: #0ca30c; --chip-bg: #242422;
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500; --cat-5: #d55181; --cat-6: #0ca30c; --cat-7: #9085e9;
+    --ok: #1fb31f; --warn: #e0a100; --up: #1fb31f; --down: #e66767; --bad: #e66767; --vwap: #d95926;
+    --a: #1fb31f; --b: #e0a100; --x: #e66767; --kz: rgba(57,135,229,0.10);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-1-soft: rgba(57,135,229,0.18);
+  --good: #0ca30c; --good-mark: #0ca30c; --chip-bg: #242422;
+  --ok: #1fb31f; --warn: #e0a100; --up: #1fb31f; --down: #e66767; --bad: #e66767; --vwap: #d95926;
+  --a: #1fb31f; --b: #e0a100; --x: #e66767; --kz: rgba(57,135,229,0.10);
+}
+
+html, body { background: var(--page); }
+body { color: var(--ink); font-family: var(--yh-font); }
+.card, .light, .vd, .ev, .cy-box, .cy-card { border-color: var(--border) !important; }
+.card, .light { background: var(--surface); border-radius: 10px; }
+button { border-color: var(--border); background: var(--chip-bg); color: var(--ink); border-radius: 8px; }
+button:hover { border-color: var(--axis); }
+button.primary { background: var(--series-1); border-color: transparent; color: #fff; }
+th { color: var(--muted); }
+td, th { border-color: var(--grid); }
+table { font-variant-numeric: tabular-nums; }
+::selection { background: var(--series-1-soft); }
+
+/* ===== 玉衡标志（页头） ===== */
+.brand { display: flex; align-items: center; gap: 10px; margin: 0; font-size: inherit; flex: none; }
+.brand-sub b, .brand-sub small { white-space: nowrap; }
+.brand .seal { width: 34px; height: 34px; border-radius: 3px; }
+.brand .mark { height: 40px; width: auto; }
+.brand .mark.white { display: none; }
+.brand-sub { display: flex; flex-direction: column; line-height: 1.25; padding-left: 10px; border-left: 1px solid var(--axis); }
+.brand-sub b { font-size: 14px; font-weight: 600; font-family: var(--yh-serif); letter-spacing: 2px; color: var(--ink); }
+.brand-sub small { font-size: 10px; color: var(--muted); letter-spacing: 2px; font-weight: 400; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand .mark.ink { display: none; } :root:not([data-theme="light"]) .brand .mark.white { display: block; } }
+:root[data-theme="dark"] .brand .mark.ink { display: none; } :root[data-theme="dark"] .brand .mark.white { display: block; }
+@media (max-width: 560px) { .brand .mark { height: 32px; } .brand .seal { width: 28px; height: 28px; } .brand-sub small { display: none; } }
+
+/* ===== 作战面板：盈亏 + 纪律 + 持仓（cyber.js 生成的结构，换成玉衡的样子） ===== */
+.cy-panel { display: grid; grid-template-columns: minmax(250px, 320px) 1fr; gap: 12px; margin: 12px 16px 0; }
+.cy-wrap .cy-panel { margin: 0 0 14px; }
+@media (max-width: 900px) { .cy-panel { grid-template-columns: 1fr; } }
+.cy-box { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 12px 14px; position: relative; }
+.cy-box .cy-t { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.cy-pnl { display: flex; align-items: center; gap: 14px; }
+.cy-pnl canvas { image-rendering: pixelated; flex: none; width: 56px !important; height: 56px !important; display: block; }
+.cy-big { font-size: 34px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.cy-sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cy-win { border-color: color-mix(in srgb, var(--up) 45%, transparent) !important; }
+.cy-win .cy-big { color: var(--up); }
+.cy-lose { border-color: color-mix(in srgb, var(--down) 55%, transparent) !important; }
+.cy-lose .cy-big { color: var(--down); }
+.cy-flat .cy-big { color: var(--ink); }
+.cy-rules { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cy-rules span { font-size: 12px; background: var(--chip-bg); border-radius: 999px; padding: 1px 9px; color: var(--ink-2); }
+.cy-alarm { display: flex; gap: 14px; align-items: center; border: 1px solid var(--critical); border-left: 6px solid var(--critical);
+  background: color-mix(in srgb, var(--critical) 9%, var(--surface)); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px;
+  animation: yh-pulse 1.4s ease-in-out infinite; }
+.cy-alarm.warn { border-color: var(--warning); border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, var(--surface)); animation: none; }
+.cy-bang { font-size: 40px; font-weight: 800; line-height: 1; color: var(--critical); flex: none; width: 44px; text-align: center; }
+.cy-alarm.warn .cy-bang { color: var(--warn); font-size: 32px; }
+.cy-alarm ul { margin: 0; padding-left: 0; list-style: none; font-size: 15px; font-weight: 600; }
+.cy-alarm li { margin: 3px 0; } .cy-alarm li::before { content: "• "; color: var(--critical); } .cy-alarm.warn li::before { color: var(--warn); }
+.cy-pos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.cy-card { border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; background: var(--page); }
+.cy-card .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cy-card .nm { font-weight: 700; font-size: 14px; }
+.cy-card .st { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: auto; }
+.cy-card.stop { border-color: var(--critical) !important; animation: yh-pulse 1.4s ease-in-out infinite; } .cy-card.stop .st { background: var(--critical); color: #fff; }
+.cy-card.warn { border-color: var(--warning) !important; } .cy-card.warn .st { background: var(--warning); color: #000; }
+.cy-card.good { border-color: color-mix(in srgb, var(--up) 55%, transparent) !important; } .cy-card.good .st { background: var(--up); color: #fff; }
+.cy-card.info .st { background: var(--series-1); color: #fff; }
+.cy-card .nums { font-size: 15px; display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.cy-card .act { font-size: 13.5px; margin-top: 4px; }
+.cy-card .flag { display: inline-block; background: var(--critical); color: #fff; font-weight: 600; padding: 0 7px; border-radius: 999px; margin: 4px 6px 0 0; font-size: 12px; }
+.cy-rbar { position: relative; height: 10px; background: var(--chip-bg); border-radius: 5px; overflow: hidden; margin: 6px 0 2px; }
+.cy-rbar i { position: absolute; top: 0; bottom: 0; }
+.cy-rbar .z { width: 1px; background: var(--ink); opacity: .5; }
+.cy-rbar .s { width: 2px; background: var(--critical); }
+.cy-rbar .g { width: 1px; background: var(--up); opacity: .8; }
+.cy-rlab { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.cy-none { color: var(--muted); font-size: 13px; padding: 6px 0; }
+.cy-closed { font-size: 13px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+body.cy-red::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  box-shadow: inset 0 0 0 4px var(--critical), inset 0 0 60px color-mix(in srgb, var(--critical) 30%, transparent); animation: yh-pulse 1.4s ease-in-out infinite; }
+@keyframes yh-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+/* ===== 今日盈亏的吉凶字（玉衡 5.0，替换像素表情）：草书，和玉衡标志同一路；没网时退回楷体 ===== */
+.yh-luck { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; height: 64px; padding: 0 4px;
+  font-family: "Zhi Mang Xing", "Kaiti SC", "STKaiti", "KaiTi", var(--yh-serif); font-size: 40px; line-height: 1; font-weight: 400;
+  color: var(--muted); letter-spacing: -2px; user-select: none; }
+.yh-luck.good { color: var(--up); }
+.yh-luck.bad { color: var(--down); }
+.yh-luck.big { font-size: 44px; border: 2.5px solid currentColor; border-radius: 4px; padding: 2px 5px; height: 66px;
+  box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 3.5px currentColor; }
+.yh-luck.flat { font-size: 44px; }

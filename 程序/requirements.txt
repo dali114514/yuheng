@@ -1,0 +1,9 @@
+yfinance>=0.2.50
+pandas
+numpy
+matplotlib
+python-docx
+openpyxl
+moomoo-api
+discord.py>=2.4
+scipy

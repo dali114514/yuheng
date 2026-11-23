@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玉衡 v{{VERSION}} · 盯盘</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png">
+<link rel="apple-touch-icon" href="/brand/icon-256.png">
+<style>
+:root{--bg:#f5f6f8;--panel:#fff;--ink:#15171c;--muted:#6b7280;--line:#e2e5ea;--up:#15803d;--down:#dc2626;--accent:#2563eb;--vwap:#d97706;--box:rgba(37,99,235,.08);--chip:#eef1f5;--a:#15803d;--b:#b45309;--c:#6b7280;--x:#dc2626}
+@media (prefers-color-scheme: dark){:root{--bg:#0f1115;--panel:#171a21;--ink:#e8eaee;--muted:#9aa3b2;--line:#2a2f3a;--up:#22c55e;--down:#ef4444;--accent:#60a5fa;--vwap:#f59e0b;--box:rgba(96,165,250,.12);--chip:#232833;--a:#22c55e;--b:#f59e0b;--c:#9aa3b2;--x:#ef4444}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:17px;margin:0}
+.note{font-size:13px;color:var(--muted)}
+.note b{color:var(--ink)}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--up);margin-right:6px;vertical-align:middle}
+.ctl{display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:wrap}
+input,button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:5px 9px}
+button{cursor:pointer} button:hover{border-color:var(--accent)}
+main{display:grid;grid-template-columns:290px 1fr;gap:14px;padding:14px 16px;align-items:start}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.side .hd{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;position:relative}
+.row:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.row.sel{background:color-mix(in srgb,var(--accent) 11%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+.row.ref{background:color-mix(in srgb,var(--muted) 6%,transparent)}
+.code{font-weight:650;font-size:15px}
+.px{text-align:right;font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)}
+.chips{grid-column:1/3;display:flex;flex-wrap:wrap;gap:4px;font-size:11.5px}
+.chip{background:var(--chip);border-radius:5px;padding:0 6px;color:var(--muted)}
+.chip.A{background:color-mix(in srgb,var(--a) 18%,transparent);color:var(--a);font-weight:600}
+.chip.B{background:color-mix(in srgb,var(--b) 18%,transparent);color:var(--b);font-weight:600}
+.chip.box{background:var(--box);color:var(--accent)}
+.spark{grid-column:1/3;height:22px;width:100%}
+.del{position:absolute;right:6px;top:4px;border:0;background:none;color:var(--muted);padding:0 4px;font-size:15px;display:none}
+.row:hover .del{display:block}
+.add{display:flex;gap:6px;padding:10px 12px}
+.add input{flex:1;min-width:0;text-transform:uppercase}
+.wrapc{padding:10px 12px 4px}
+.title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.title .code{font-size:19px}
+canvas{width:100%;height:430px;display:block}
+.hover{font-size:12px;color:var(--muted);min-height:18px;font-variant-numeric:tabular-nums}
+.cols{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px}
+@media (max-width:1180px){.cols{grid-template-columns:1fr}}
+.sec{padding:12px 14px}
+.sec h3{margin:0 0 10px;font-size:14px}
+.ev{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:10px}
+.ev .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.ev .nm{font-weight:650;font-size:15px}
+.grade{font-weight:700;border-radius:5px;padding:0 7px;font-size:12.5px}
+.grade.A{background:var(--a);color:#fff} .grade.B{background:var(--b);color:#fff} .grade.C{background:var(--chip);color:var(--c)}
+.grade.X{background:color-mix(in srgb,var(--x) 15%,transparent);color:var(--x)} .grade.Z{background:var(--box);color:var(--accent)}
+.small{font-size:12px;color:var(--muted)}
+.why{margin:6px 0}
+.bars{margin:8px 0 4px}
+.bar{display:grid;grid-template-columns:96px 1fr 46px;gap:8px;align-items:center;font-size:12px;margin:3px 0}
+.track{height:10px;background:var(--chip);border-radius:5px;position:relative;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
+.mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted);opacity:.6}
+.checks{font-size:12.5px;margin-top:6px;line-height:1.7}
+.ok{color:var(--up)} .no{color:var(--down)}
+details{margin-top:6px} summary{cursor:pointer;font-size:12px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:12px;margin-top:4px}
+td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right} td:first-child,th:first-child{text-align:left}
+.state div{margin:3px 0}
+.honest{font-size:12px;color:var(--muted);border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+.verdict{display:inline-block;border-radius:5px;padding:0 6px;font-size:12px;background:var(--chip)}
+.err{color:var(--down);padding:20px}
+img.sim{width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px}
+.empty{color:var(--muted);padding:6px 0}
+.vd{padding:14px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);margin-bottom:14px}
+.vd .lbl{font-size:30px;font-weight:750;line-height:1.15;letter-spacing:.5px}
+.vd.go{border-color:var(--up);background:color-mix(in srgb,var(--up) 10%,var(--panel))} .vd.go .lbl{color:var(--up)}
+.vd.wait{border-color:var(--b);background:color-mix(in srgb,var(--b) 9%,var(--panel))} .vd.wait .lbl{color:var(--b)}
+.vd.no .lbl{color:var(--muted)}
+.vd.stop{border-color:var(--down);background:color-mix(in srgb,var(--down) 10%,var(--panel))} .vd.stop .lbl{color:var(--down)}
+.vd .rs{font-size:15px;margin-top:6px}
+.vd .hd2{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.ch2{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.ch2 span{background:var(--chip);border-radius:6px;padding:2px 8px;font-size:12.5px}
+.ch2 span b{font-weight:600;color:var(--muted);margin-right:4px}
+.ch2 .up{color:var(--up)} .ch2 .down{color:var(--down)} .ch2 .bad{color:var(--down);font-weight:600} .ch2 .box{color:var(--accent)}
+.pill{display:inline-block;border-radius:6px;padding:0 7px;font-size:12.5px;font-weight:650}
+.pill.go{background:var(--up);color:#fff} .pill.wait{background:color-mix(in srgb,var(--b) 20%,transparent);color:var(--b)}
+.pill.no{background:var(--chip);color:var(--muted)} .pill.stop{background:var(--down);color:#fff}
+.rs2{grid-column:1/3;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#morebtn{width:100%;margin:14px 0 0;padding:9px;font-size:14px}
+#more{display:none} body.more #more{display:block}
+.tabs{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.tabs button{border:0;border-radius:0;padding:2px 9px;font-size:12px}
+.tabs button.on{background:var(--accent);color:#fff}
+.title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media (max-width:1180px){.grid2{grid-template-columns:1fr}}
+.kv2{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px} .kv2 span:nth-child(odd){color:var(--muted)}
+
+.lad{width:100%;border-collapse:collapse;font-size:13.5px}
+.lad td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+.lad td.w{white-space:nowrap;color:var(--muted);width:78px}
+.lad td.c{white-space:nowrap;width:92px}
+.lad td.h{white-space:nowrap;text-align:right;color:var(--muted);font-size:12px;width:150px}
+.tag{border-radius:5px;padding:1px 7px;font-size:12.5px;font-weight:600;background:var(--chip);color:var(--muted)}
+.tag.u{background:color-mix(in srgb,var(--up) 15%,transparent);color:var(--up)} .tag.d{background:color-mix(in srgb,var(--down) 15%,transparent);color:var(--down)}
+.sum{margin-top:12px;padding:12px 14px;border-radius:9px;background:color-mix(in srgb,var(--accent) 9%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);font-size:14.5px}
+.sum b{font-weight:700}
+</style>
+<link rel="stylesheet" href="/yuheng.css">
+</head>
+<body>
+<header>
+  <h1 class="brand" title="玉衡：北斗第五星。衡是秤杆，权衡轻重、冷静决策。"><img class="seal" src="/brand/seal-128.png" alt=""><img class="mark ink" src="/brand/yuheng-ink.png" alt="玉衡"><img class="mark white" src="/brand/yuheng-white.png" alt="玉衡"><span class="brand-sub"><b>盯盘</b><small>YUHENG v{{VERSION}}</small></span></h1>
+  <span class="note" id="note">载入中…</span>
+  <span class="note" id="plan"></span>
+  <span class="note" id="share"></span>
+  <div class="ctl">
+    <span class="small">回放</span>
+    <input type="date" id="d"> <input type="time" id="tm" step="60">
+    <button id="back" title="往前 1 分钟">◀</button><button id="fwd" title="往后 1 分钟">▶</button>
+    <button id="liveb">回到实时</button>
+  </div>
+</header>
+<div id="cypanel"></div>
+<main>
+  <section class="card side">
+    <div class="hd"><span>今天盯的股票</span><span id="cnt"></span></div>
+    <div id="list"></div>
+    <div class="add"><input id="addi" placeholder="加股票，例如 NVDA" maxlength="10"><button id="addb">加</button></div>
+    <div class="small" style="padding:0 12px 10px">最多 10 只；QQQ 固定在最上面当参照。名单只影响这个界面，纪律按「纪律设置」。</div>
+  </section>
+  <section>
+    <div id="vd" class="vd"><div class="small">载入中…</div></div>
+    <div class="card">
+      <div class="wrapc">
+        <div class="title"><span class="small" id="tinfo"></span>
+          <span class="small" style="margin-left:auto">期权墙：</span>
+          <span class="tabs" id="owm"><button data-m="oi">持仓</button><button data-m="vol">今日成交</button><button data-m="off">关</button></span></div>
+        <canvas id="cv"></canvas>
+        <div class="hover" id="hover"> </div>
+      </div>
+    </div>
+    <button id="morebtn">展开详细（理由、纪律逐条、六行看盘、资金和期权、形态、相似日）</button>
+    <div id="more">
+      <div class="grid2">
+        <div class="card sec"><h3>为什么这么说：纪律逐条核对</h3><div id="why"></div></div>
+        <div class="card sec"><h3>资金流向和期权（gamma / delta）</h3><div id="fo"></div></div>
+      </div>
+      <div class="card sec" style="margin-top:14px"><h3>六行看盘：从 1 根看到 30 根</h3><div id="lad"></div></div>
+      <div class="grid2">
+        <div class="card sec"><h3>识别到的具体形态（最近 15 分钟，对照 92 形态图）</h3><div id="evs"></div></div>
+        <div>
+          <div class="card sec state"><h3>现在的状态</h3><div id="lines"></div></div>
+          <div class="card sec" style="margin-top:14px">
+            <h3>相似的历史日子</h3>
+            <div class="small">在一年的历史里找「同一时刻、走势最像」的日子，看它们之后怎么走（约 5–10 秒）。</div>
+            <button id="simb" style="margin-top:8px">找相似日</button>
+            <div id="sim"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="honest">如实说：用 34 只股票一年的 1 分钟K统计，所有信号K、组合K、双顶双底、震荡突破之后往形态方向走的比例都在 48%–52%，和「随便一根K」的基准差不到 2 个百分点。
+      A / B / C 是纪律五条（VWAP 同侧、C1 方向、QQQ 同向、关键位、止损 ≤ $1）的核对结果，不是胜率。这个界面告诉你「哪里出现了值得看的位置」，进不进按今天的打法和纪律。</div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let SEL = null, LIST = null, DET = null, replay = {d: "", t: ""};
+try { SEL = localStorage.getItem("dash.sel"); } catch (e) {}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const qs = () => (replay.d ? `&date=${replay.d}` : "") + (replay.t ? `&time=${replay.t}` : "");
+const fmt = (x, k = 2) => x == null ? "—" : Number(x).toFixed(k);
+const pct = x => x == null ? "" : (x > 0 ? "+" : "") + x.toFixed(2) + "%";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+async function api(p, opt) { const r = await fetch(p, opt); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
+
+async function loadList() {
+  try { LIST = await api("/api/list?x=1" + qs()); } catch (e) { $("#note").textContent = "出错：" + e.message; return; }
+  const live = LIST.note === "实时";
+  $("#note").innerHTML = (live ? '<span class="live"></span>' : "") + `<b>${esc(LIST.note)}</b>　美东 ${esc(LIST.t)}`;
+  $("#plan").textContent = LIST.plan ? `纪律设置：${LIST.plan.状态 || ""} · ${LIST.plan.偏向 || ""}` : "今天的纪律设置还没定（分级没核对名单）";
+  $("#cnt").textContent = `${LIST.watch.length}/${LIST.max}`;
+  const sh = LIST.share || {};
+  $("#share").innerHTML = !sh.on ? "" : sh.url ? `同事打开：<b>${esc(sh.url)}</b>` : "共享已开，但 Tailscale 没连上";
+  if (!SEL || !LIST.rows.some(r => r.code === SEL)) SEL = (LIST.rows[1] || LIST.rows[0] || {}).code;
+  $("#list").innerHTML = LIST.rows.map(r => {
+    if (r.err) return `<div class="row" data-c="${r.code}"><span class="code">${r.code}</span><span class="small">${esc(r.err)}</span>${r.code !== "QQQ" ? `<button class="del" data-del="${r.code}">×</button>` : ""}</div>`;
+    const ch = [];
+    if (r.vd) ch.push(`<span class="pill ${r.vd.tone}">${esc(r.vd.label)}</span>`);
+    else ch.push(`<span class="chip">VWAP ${r.side > 0 ? "上" : "下"} ${fmt(Math.abs(r.dist || 0))}</span>`);
+    if (r.plan) ch.push(`<span class="chip">计划 ${esc(r.plan)}</span>`);
+    return `<div class="row ${r.code === SEL ? "sel" : ""} ${r.code === "QQQ" ? "ref" : ""}" data-c="${r.code}">
+      <span class="code">${r.code}${r.code === "QQQ" ? ' <span class="small">参照</span>' : ""}</span>
+      <span class="px">${fmt(r.last)} <span class="${(r.chg || 0) >= 0 ? "up" : "down"}">${pct(r.chg)}</span></span>
+      <div class="chips">${ch.join("")}</div>${r.vd ? `<div class="rs2">${esc(r.vd.reason)}</div>` : ""}
+      <canvas class="spark" data-s="${r.spark.join(",")}"></canvas>
+      ${r.code !== "QQQ" ? `<button class="del" data-del="${r.code}" title="移出">×</button>` : ""}</div>`;
+  }).join("");
+  document.querySelectorAll(".spark").forEach(drawSpark);
+}
+
+function drawSpark(cv) {
+  const v = cv.dataset.s.split(",").map(Number); if (v.length < 2) return;
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const lo = Math.min(...v), hi = Math.max(...v), up = v[v.length - 1] >= v[0];
+  g.strokeStyle = up ? css("--up") : css("--down"); g.lineWidth = 1.3; g.beginPath();
+  v.forEach((x, i) => { const X = i / (v.length - 1) * w, Y = h - 2 - (x - lo) / ((hi - lo) || 1) * (h - 4); i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+  g.stroke();
+}
+
+async function loadDetail() {
+  if (!SEL) return;
+  try { DET = await api(`/api/detail?code=${SEL}` + qs()); } catch (e) { $("#evs").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (DET.err) { $("#vd").className = "vd no"; $("#vd").innerHTML = `<div class="hd2"><span class="code">${SEL}</span></div><div class="err" style="padding:0">${esc(DET.err)}</div>`; clearChart(); return; }
+  const last = DET.bars[DET.bars.length - 1], v = DET.verdict;
+  $("#vd").className = "vd " + v.tone;
+  $("#vd").innerHTML = `<div class="hd2"><span class="code">${SEL}</span><b>${fmt(last[4])}</b><span class="small">${DET.t}${DET.note === "实时" ? "" : " · " + esc(DET.note)}</span></div>
+    <div class="lbl">${esc(v.label)}</div><div class="rs">${esc(v.reason)}</div>
+    <div class="ch2">${v.chips.map(c => `<span class="${c.tone || ""}"><b>${esc(c.k)}</b>${esc(c.v)}</span>`).join("")}</div>`;
+  $("#tinfo").textContent = `${DET.day} · 到 ${DET.t} · 日线 ATR ${fmt(DET.atr)}`;
+  $("#why").innerHTML = whyHTML(); $("#fo").innerHTML = foHTML();
+  drawChart();
+  $("#lines").innerHTML = DET.lines.map(x => `<div>${esc(x)}</div>`).join("");
+  $("#lad").innerHTML = ladHTML();
+  const evs = [...DET.events.filter(e => e.grade !== "纪律不允许"), ...DET.events.filter(e => e.grade === "纪律不允许")];
+  $("#evs").innerHTML = evs.length ? evs.slice(0, 10).map(evHTML).join("") :
+    `<div class="empty">最近 15 分钟没有识别到形态。${DET.box ? "价格在震荡区间里：等收盘站出去。" : ""}</div>`;
+}
+
+function whyHTML() {
+  const v = DET.verdict, L = [];
+  L.push(`<div style="margin-bottom:6px"><b>${esc(v.label)}</b>：${esc(v.reason)}</div>`);
+  if (v.checks && v.checks.length) L.push(`<div class="checks">${v.checks.map(x => x.startsWith("✓") ? `<span class="ok">${esc(x)}</span>` : x.startsWith("✗") ? `<span class="no">${esc(x)}</span>` : esc(x)).join("<br>")}</div>
+    <div class="small" style="margin-top:4px">级别：五条全中 A，差一条 B，差两条以上 C（C 级按纪律不做）。这是纪律核对，不是胜率。</div>`);
+  const g = DET.guard;
+  if (g && !g.note) {
+    L.push(`<div class="kv2" style="margin-top:10px"><span>纪律设置</span><span>${g.locked ? "已锁定" : "草稿（不弹窗）"} · ${esc(g.bias || "")} · ${esc(g.style || "")}</span>
+      <span>已开仓</span><span>${g.opens} 笔 / 上限 ${g.max || "不限"}</span><span>今日盈亏</span><span>${g.pnl == null ? "读不到" : "$" + Math.round(g.pnl).toLocaleString()} / 上限 ${g.max_loss || "不限"}</span></div>`);
+    if (g.events && g.events.length) L.push(`<div class="small" style="margin-top:8px">今天纪律程序触发过：</div>` + g.events.slice(-6).map(e => `<div class="no" style="font-size:12.5px">· ${esc(e)}</div>`).join(""));
+  } else if (g && g.note) L.push(`<div class="small" style="margin-top:8px">${esc(g.note)}</div>`);
+  else if (DET.note !== "实时") L.push(`<div class="small" style="margin-top:8px">回放时没有成交记录，笔数和盈亏不核对。</div>`);
+  return L.join("");
+}
+
+function foHTML() {
+  const f = DET.flow, o = DET.opt, M = x => x == null ? "—" : (x >= 0 ? "+" : "-") + "$" + (Math.abs(x) >= 1e8 ? (Math.abs(x) / 1e8).toFixed(2) + " 亿" : Math.round(Math.abs(x) / 1e4) + " 万");
+  if (DET.note !== "实时") return `<div class="small">回放时没有资金流向和实时期权数据（moomoo 只给当天的）。盘前抓的期权墙如果有，已经画在 K 线上（蓝虚线）。</div>`;
+  const L = [];
+  L.push(f ? `<div class="kv2"><span>今日净流入</span><span>${M(f.net)}</span><span>最近 15 分钟</span><span class="${(f.d15 || 0) >= 0 ? "up" : "down"}">${M(f.d15)}</span>
+    <span>大单净额</span><span>${M(f.big)}</span><span>中小单净额</span><span>${M(f.small)}</span></div>` : `<div class="small">资金流向读不到</div>`);
+  if (o) {
+    L.push(`<div class="kv2" style="margin-top:12px"><span>看涨墙（上方）</span><span>${o.call_wall ?? "—"}　${(o.calls || []).map(x => x[0] + "（" + x[1].toLocaleString() + "）").join("、")}</span>
+      <span>看跌墙（下方）</span><span>${o.put_wall ?? "—"}　${(o.puts || []).map(x => x[0] + "（" + x[1].toLocaleString() + "）").join("、")}</span>
+      <span>净 gamma（每 1%）</span><span>${M(o.gex)} · ${o.gex > 0 ? "正：做市商对冲倾向高抛低吸，偏震荡" : "负：做市商对冲倾向追涨杀跌，容易走单边"}</span>
+      <span>delta 对比</span><span>看涨一边是看跌的 ${o.delta_ratio == null ? "—" : o.delta_ratio.toFixed(2)} 倍（大于 1 = 押涨的仓位更重）</span>
+      <span>看跌/看涨 未平仓</span><span>${o.pcr.toFixed(2)}</span><span>更新</span><span>美东 ${esc(o.at || "")}（每 5 分钟）· 到期 ${esc((o.exps || []).join("、"))}</span></div>`);
+  } else L.push(`<div class="small" style="margin-top:10px">期权数据还没取到（第一次要几秒，之后每 5 分钟刷新）。</div>`);
+  L.push(`<div class="small" style="margin-top:10px">gamma、delta 是 moomoo 实时算的，未平仓量是昨天收盘的数字（盘中不更新）。资金流向是 moomoo 按单子大小分的口径。这三样都没有用你的数据回测过，只当背景和位置看，不单独作为进场理由。</div>`);
+  return L.join("");
+}
+
+function ladHTML() {
+  const rows = (DET.ladder || []).map(r => {
+    if (!r.cat) return `<tr><td class="w">${esc(r.name)}</td><td class="c"></td><td class="small">${esc(r.text)}</td><td class="h"></td></tr>`;
+    const cls = r.lean > 0 ? "u" : r.lean < 0 ? "d" : "";
+    let h = "";
+    if (r.stat) {
+      const up = r.stat.up, n = r.stat.n.toLocaleString();
+      h = r.lean > 0 ? `之后继续往上 ${up.toFixed(0)}%` : r.lean < 0 ? `之后继续往下 ${(100 - up).toFixed(0)}%` : `之后往上 ${up.toFixed(0)}%`;
+      h += `<br>历史 ${n} 次`;
+    }
+    return `<tr><td class="w">${esc(r.name)}</td><td class="c"><span class="tag ${cls}">${esc(r.cat)}</span></td><td>${esc(r.text)}</td><td class="h">${h}</td></tr>`;
+  }).join("");
+  const sum = esc(DET.summary || "").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  return `<table class="lad">${rows}</table>
+    <div class="small" style="margin-top:6px">右边是历史上同样的情况之后 15 分钟的走向（9:36–11:00，一年数据）。每一行单独看都在 50% 左右：单看哪一层都猜不出方向。</div>
+    <div class="sum"><span class="small">合起来（按打法 A）</span><br>${sum}</div>`;
+}
+
+function gcls(g) { return g === "A" ? "A" : g === "B" ? "B" : g === "C" ? "C" : g === "震荡中" ? "Z" : "X"; }
+
+function evHTML(e) {
+  const c = e.card, dirw = e.dir > 0 ? "看多" : "看空";
+  if (e.grade === "纪律不允许") return `<div class="ev" style="padding:6px 12px;opacity:.75"><span class="grade X">纪律不允许</span> <span class="${e.dir > 0 ? "up" : "down"}">${esc(e.name)}</span> <span class="small">${esc(e.frame)} · ${e.t} · ${esc((e.checks[0] || "").replace("✗ ", ""))}${c ? " · 历史 " + c.rows[0].win.toFixed(0) + "%（基准 " + c.rows[0].base.toFixed(0) + "%）" : ""}</span></div>`;
+  let bars = "";
+  if (c && c.rows.length) {
+    const all = c.rows[0];
+    const ctx = c.rows.find(r => (e.prob || "").includes(r.ctx + "时")) || null;
+    const one = (label, r) => `<div class="bar"><span>${label}</span><div class="track"><div class="fill" style="width:${r.win}%;background:${r.win - r.base >= 3 ? css("--up") : r.base - r.win >= 3 ? css("--down") : css("--muted")}"></div><div class="mid"></div></div><span>${r.win.toFixed(0)}%</span></div>
+      <div class="bar small"><span>　基准</span><div class="track"><div class="fill" style="width:${r.base}%;background:${css("--muted")};opacity:.45"></div><div class="mid"></div></div><span>${r.base.toFixed(0)}%</span></div>`;
+    bars = `<div class="bars">${one("全部 " + all.n.toLocaleString() + " 次", all)}${ctx && ctx !== all ? one(ctx.ctx + " " + ctx.n.toLocaleString(), ctx) : ""}</div>
+      <div class="small">后 ${c.hz} 根往${dirw}方向的比例（中间竖线 = 50%）。结论：<span class="verdict">${esc(c.verdict)}</span></div>
+      <details><summary>分情况看</summary><table><tr><th>情况</th><th>次数</th><th>往方向</th><th>基准</th><th>平均 ATR</th></tr>
+      ${c.rows.map(r => `<tr><td>${esc(r.ctx)}</td><td>${r.n.toLocaleString()}</td><td>${r.win.toFixed(0)}%</td><td>${r.base.toFixed(0)}%</td><td>${(r.mean >= 0 ? "+" : "") + r.mean.toFixed(3)}</td></tr>`).join("")}</table></details>`;
+  }
+  const ck = (e.checks || []).map(x => x.startsWith("✓") ? `<span class="ok">${esc(x)}</span>` : x.startsWith("✗") ? `<span class="no">${esc(x)}</span>` : `<span class="small">${esc(x)}</span>`).join("<br>");
+  const box = e.box ? `　区间 ${fmt(e.box[1])}–${fmt(e.box[0])}（高 $${fmt(e.box[0] - e.box[1])}）` : "";
+  return `<div class="ev"><div class="top"><span class="grade ${gcls(e.grade)}">${esc(e.grade)}</span><span class="nm ${e.dir > 0 ? "up" : "down"}">${esc(e.name)}</span>
+    <span class="small">${esc(e.frame)} · ${dirw} · ${e.t}${e.ago ? `（${e.ago} 分钟前）` : "（刚收盘这根）"} · 价 ${fmt(e.price)}${box}</span></div>
+    ${e.cheat ? `<div class="small">≈ ${esc(e.cheat)}</div>` : ""}
+    <div class="why">${esc(e.why)}</div>${bars}
+    <div class="checks">${ck}<br><span class="small">止损约 $${fmt(e.stop_usd)}</span></div></div>`;
+}
+
+// ---------------------------------------------------------------- K 线图
+let GEO = null;
+function clearChart() { const cv = $("#cv"); cv.getContext("2d").clearRect(0, 0, cv.width, cv.height); }
+function drawChart() {
+  const cv = $("#cv"), dpr = devicePixelRatio || 1, W = cv.clientWidth, Hh = cv.clientHeight;
+  cv.width = W * dpr; cv.height = Hh * dpr; const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const B = DET.bars, n = B.length, slots = Math.max(n + 8, 120), padR = 84, padT = 10, padB = 22;
+  let lo = Math.min(...B.map(b => b[3]), ...DET.vwap), hi = Math.max(...B.map(b => b[2]), ...DET.vwap);
+  const span = hi - lo || 1; const lv = DET.levels.filter(l => l.p > lo - span * .25 && l.p < hi + span * .25);
+  lv.forEach(l => { lo = Math.min(lo, l.p); hi = Math.max(hi, l.p); });
+  const pad = (hi - lo) * .06; lo -= pad; hi += pad;
+  const cw = (W - padR) / slots, X = i => (i + .5) * cw, Y = p => padT + (hi - p) / (hi - lo) * (Hh - padT - padB);
+  GEO = {cw, X, Y, lo, hi, padR, W, Hh};
+  g.fillStyle = css("--muted"); g.font = "11px -apple-system,PingFang SC"; g.strokeStyle = css("--line"); g.lineWidth = 1;
+  for (let k = 0; k <= 5; k++) { const p = lo + (hi - lo) * k / 5, y = Y(p); g.beginPath(); g.moveTo(0, y); g.lineTo(W - padR, y); g.stroke(); g.fillText(p.toFixed(2), W - padR + 4, y + 4); }
+  B.forEach((b, i) => { if (i % 30 === 0) g.fillText(b[0], X(i) - 14, Hh - 6); });
+  g.fillStyle = css("--chip"); g.globalAlpha = .7; g.fillRect(0, padT, X(4) + cw / 2, Hh - padT - padB); g.globalAlpha = 1;
+  // 震荡区间
+  DET.marks.filter(m => m.box).forEach(m => { const [bh, bl, a, b] = m.box; g.fillStyle = css("--box"); g.fillRect(X(a) - cw / 2, Y(bh), (b - a + 1) * cw, Y(bl) - Y(bh)); });
+  if (DET.box) { const [bh, bl, L] = DET.box; g.fillStyle = css("--box"); g.fillRect(X(n - L) - cw / 2, Y(bh), L * cw, Y(bl) - Y(bh));
+    g.strokeStyle = css("--accent"); g.setLineDash([3, 3]); g.strokeRect(X(n - L) - cw / 2, Y(bh), L * cw, Y(bl) - Y(bh)); g.setLineDash([]); }
+  // 关键价位
+  lv.forEach(l => { const y = Y(l.p); g.strokeStyle = /墙/.test(l.name) ? css("--accent") : css("--muted"); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, y); g.lineTo(W - padR, y); g.stroke(); g.setLineDash([]);
+    g.fillStyle = g.strokeStyle; g.fillText(`${l.name} ${l.p.toFixed(2)}`, 4, y - 3); });
+  // 实时期权墙：右侧每个行权价一根横条（绿 = 看涨，红 = 看跌），长度 = 持仓或今日成交
+  const prof = (DET.opt && DET.opt.profile) || [];
+  if (OWM !== "off" && prof.length) {
+    const ci = OWM === "vol" ? 3 : 1, pi = OWM === "vol" ? 4 : 2, wMax = (W - padR) * 0.22, x1 = W - padR - 2;
+    const vis = prof.filter(r => r[0] >= lo && r[0] <= hi), mx = Math.max(1, ...vis.map(r => Math.max(r[ci], r[pi])));
+    const ks = vis.map(r => r[0]).sort((a, b) => a - b), gap = ks.length > 1 ? Math.min(...ks.slice(1).map((k, i) => Math.abs(Y(k) - Y(ks[i])))) : 12;
+    const bh = Math.max(2, Math.min(9, gap * 0.42));
+    const topC = vis.reduce((m, r) => r[ci] > (m ? m[ci] : -1) ? r : m, null), topP = vis.reduce((m, r) => r[pi] > (m ? m[pi] : -1) ? r : m, null);
+    vis.forEach(r => { const y = Y(r[0]);
+      g.globalAlpha = .42; g.fillStyle = css("--up"); const lc = r[ci] / mx * wMax; g.fillRect(x1 - lc, y - bh, lc, bh);
+      g.fillStyle = css("--down"); const lp = r[pi] / mx * wMax; g.fillRect(x1 - lp, y, lp, bh); g.globalAlpha = 1; });
+    g.font = "11px -apple-system,PingFang SC";
+    const wd = OWM === "vol" ? "成交" : "持仓";            // 只标画面里最多的那一档；真正的墙用虚线「看涨墙 / 看跌墙」标
+    if (topC && topC[ci] > 0) { g.fillStyle = css("--up"); g.fillText(`看涨${wd} ${topC[0]}`, x1 - wMax - 76, Y(topC[0]) - 2); }
+    if (topP && topP[pi] > 0) { g.fillStyle = css("--down"); g.fillText(`看跌${wd} ${topP[0]}`, x1 - wMax - 76, Y(topP[0]) + 11); }
+  }
+  // K 线
+  B.forEach((b, i) => { const up = b[4] >= b[1]; g.strokeStyle = g.fillStyle = up ? css("--up") : css("--down");
+    g.beginPath(); g.moveTo(X(i), Y(b[2])); g.lineTo(X(i), Y(b[3])); g.stroke();
+    const y1 = Y(Math.max(b[1], b[4])), y2 = Y(Math.min(b[1], b[4])); g.fillRect(X(i) - cw * .35, y1, Math.max(cw * .7, 1), Math.max(y2 - y1, 1)); });
+  // VWAP
+  g.strokeStyle = css("--vwap"); g.lineWidth = 1.6; g.beginPath(); DET.vwap.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = css("--vwap"); g.fillText("VWAP " + DET.vwap[n - 1].toFixed(2), W - padR + 4, Y(DET.vwap[n - 1]) - 6);
+  // 形态标记：最近 15 根的形态 + 今天全部的震荡突破 / 假突破（太多会看不清）
+  const seen = {};
+  DET.marks.filter(m => m.i >= n - 15 || m.box).forEach(m => { const b = B[m.i]; if (!b) return; seen[m.i] = (seen[m.i] || 0) + 1; if (seen[m.i] > 2) return;
+    const up = m.dir > 0, y = up ? Y(b[3]) + 8 + (seen[m.i] - 1) * 9 : Y(b[2]) - 8 - (seen[m.i] - 1) * 9;
+    g.fillStyle = m.name.includes("震荡") || m.name.includes("假突破") ? css("--accent") : up ? css("--up") : css("--down");
+    g.beginPath(); if (up) { g.moveTo(X(m.i), y - 5); g.lineTo(X(m.i) - 4, y + 2); g.lineTo(X(m.i) + 4, y + 2); } else { g.moveTo(X(m.i), y + 5); g.lineTo(X(m.i) - 4, y - 2); g.lineTo(X(m.i) + 4, y - 2); } g.fill(); });
+  // 现价
+  const px = B[n - 1][4]; g.fillStyle = css("--ink"); g.fillRect(W - padR + 1, Y(px) - 8, padR - 2, 16); g.fillStyle = css("--panel"); g.fillText(px.toFixed(2), W - padR + 4, Y(px) + 4);
+}
+$("#cv").addEventListener("mousemove", ev => {
+  if (!GEO || !DET || !DET.bars) return; const r = ev.target.getBoundingClientRect(); const i = Math.floor((ev.clientX - r.left) / GEO.cw);
+  const b = DET.bars[i]; if (!b) { $("#hover").textContent = " "; return; }
+  const ms = DET.marks.filter(m => m.i === i).map(m => m.name).join("、");
+  $("#hover").textContent = `${b[0]}　开 ${fmt(b[1])} 高 ${fmt(b[2])} 低 ${fmt(b[3])} 收 ${fmt(b[4])}　VWAP ${fmt(DET.vwap[i])}　量 ${Math.round(b[5]).toLocaleString()}${ms ? "　· " + ms : ""}`;
+});
+
+// ---------------------------------------------------------------- 相似日
+$("#simb").onclick = async () => {
+  $("#sim").innerHTML = '<div class="small" style="margin-top:8px">计算中…</div>';
+  try {
+    const s = await api(`/api/similar?code=${SEL}` + qs());
+    if (s.err) { $("#sim").innerHTML = `<div class="err">${esc(s.err)}</div>`; return; }
+    const r = x => (x >= 0 ? "+" : "") + Number(x).toFixed(2) + "R";
+    $("#sim").innerHTML = `<div style="margin-top:8px">引擎结论：<b>${esc(s.verdict)}</b>（比了 ${s.n} 个最像的情形）</div>
+      <table><tr><th></th><th>平均每笔</th><th>95% 区间</th><th>基准</th></tr>
+      <tr><td>做多</td><td>${r(s.long.mean)}</td><td>${r(s.long.lo)} ~ ${r(s.long.hi)}</td><td>${r(s.long.base)}</td></tr>
+      <tr><td>做空</td><td>${r(s.short.mean)}</td><td>${r(s.short.lo)} ~ ${r(s.short.hi)}</td><td>${r(s.short.base)}</td></tr></table>
+      <div class="small">走前验证显示相似匹配对后续走势没有预测力；区间包含 0 就当没有差别。</div>
+      ${s.png ? `<img class="sim" src="/png?f=${encodeURIComponent(s.png)}&src=${s.src || ""}&v=${Date.now()}">` : ""}`;
+  } catch (e) { $("#sim").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+};
+
+// ---------------------------------------------------------------- 名单和回放
+$("#list").addEventListener("click", async ev => {
+  const del = ev.target.dataset.del;
+  if (del) { ev.stopPropagation(); await saveWatch(LIST.watch.filter(c => c !== del)); return; }
+  const row = ev.target.closest(".row"); if (!row) return;
+  SEL = row.dataset.c; try { localStorage.setItem("dash.sel", SEL); } catch (e) {}
+  $("#sim").innerHTML = ""; document.querySelectorAll(".row").forEach(r => r.classList.toggle("sel", r.dataset.c === SEL)); loadDetail();
+});
+async function saveWatch(codes) {
+  try { await api("/api/watch", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({codes})}); } catch (e) { alert(e.message); }
+  await loadList(); loadDetail();
+}
+$("#addb").onclick = () => { const c = $("#addi").value.trim().toUpperCase(); if (!c) return;
+  if (LIST.watch.length >= LIST.max) { alert("最多 10 只，先移掉一只"); return; } $("#addi").value = ""; saveWatch([...LIST.watch, c]); };
+$("#addi").addEventListener("keydown", e => { if (e.key === "Enter") $("#addb").click(); });
+function setReplay(d, t) { replay = {d, t}; $("#d").value = d || ""; $("#tm").value = t || ""; refresh(); }
+$("#d").onchange = () => setReplay($("#d").value, $("#tm").value || "10:00");
+$("#tm").onchange = () => setReplay($("#d").value || (LIST && LIST.day) || "", $("#tm").value);
+$("#liveb").onclick = () => setReplay("", "");
+function step(k) { const d = replay.d || (LIST && LIST.day); let t = replay.t || (DET && DET.t) || "09:40"; let [h, m] = t.split(":").map(Number); m += k;
+  const tot = Math.min(960, Math.max(576, h * 60 + m)); setReplay(d, `${String(Math.floor(tot / 60)).padStart(2, "0")}:${String(tot % 60).padStart(2, "0")}`); }
+$("#back").onclick = () => step(-1); $("#fwd").onclick = () => step(1);
+document.addEventListener("keydown", e => { if (e.target.tagName === "INPUT") return; if (e.key === "ArrowLeft") step(-1); if (e.key === "ArrowRight") step(1); });
+
+try { if (localStorage.getItem("dash.more") === "1") document.body.classList.add("more"); } catch (e) {}
+function moreLabel() { $("#morebtn").textContent = document.body.classList.contains("more") ? "收起详细" : "展开详细（理由、纪律逐条、六行看盘、资金和期权、形态、相似日）"; }
+$("#morebtn").onclick = () => { document.body.classList.toggle("more"); try { localStorage.setItem("dash.more", document.body.classList.contains("more") ? "1" : "0"); } catch (e) {} moreLabel(); };
+moreLabel();
+let OWM = "oi"; try { OWM = localStorage.getItem("dash.owm") || "oi"; } catch (e) {}
+function owmUI() { document.querySelectorAll("#owm button").forEach(b => b.classList.toggle("on", b.dataset.m === OWM)); }
+document.querySelectorAll("#owm button").forEach(b => b.onclick = () => { OWM = b.dataset.m; try { localStorage.setItem("dash.owm", OWM); } catch (e) {} owmUI(); if (DET && DET.bars) drawChart(); });
+owmUI();
+async function refresh() { await loadList(); await loadDetail(); }
+refresh();
+setInterval(() => { if (!replay.d && !replay.t && LIST && LIST.note === "实时") refresh(); }, 15000);
+addEventListener("resize", () => { if (DET && DET.bars) drawChart(); document.querySelectorAll(".spark").forEach(drawSpark); });
+</script>
+<script src="/cyber.js"></script>
+<script>cyMount(document.getElementById("cypanel"), "/api/pos", 5);</script>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玉衡 v{{VERSION}} · 盘感训练</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png">
+<link rel="apple-touch-icon" href="/brand/icon-256.png">
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#16181d;--muted:#6b7280;--line:#e3e6ea;--up:#16a34a;--down:#dc2626;--accent:#2563eb;--hide:#eef1f5;--vwap:#d97706;--kz:rgba(37,99,235,.07)}
+@media (prefers-color-scheme: dark){:root{--bg:#0f1115;--panel:#171a21;--ink:#e8eaee;--muted:#9aa3b2;--line:#2a2f3a;--up:#22c55e;--down:#ef4444;--accent:#60a5fa;--hide:#1c2029;--vwap:#f59e0b;--kz:rgba(96,165,250,.10)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+h1{font-size:18px;margin:0}
+.sub{color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 280px;gap:14px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+canvas{width:100%;height:460px;display:block;cursor:crosshair}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer}
+button.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+button.long.on{border-color:var(--up)} button.short.on{border-color:var(--down)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+.hint{color:var(--muted);font-size:12px}
+.res{font-size:15px;margin:4px 0 6px}
+.win{color:var(--up)} .lose{color:var(--down)}
+.kv{display:grid;grid-template-columns:auto auto;gap:4px 10px;font-size:13px}
+.kv span:nth-child(odd){color:var(--muted)}
+h3{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600}
+.err{color:var(--down)}
+.tabs{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.tabs button{border:0;border-radius:0;padding:6px 12px}
+.tabs button.on{background:var(--accent);color:#fff;box-shadow:none}
+.stepbar{display:none} body.step .stepbar{display:inline-block} body.step .judgebar{display:none}
+</style>
+<link rel="stylesheet" href="/yuheng.css">
+</head>
+<body>
+<div class="wrap">
+  <header><h1 class="brand" title="玉衡：北斗第五星。衡是秤杆，权衡轻重、冷静决策。"><img class="seal" src="/brand/seal-128.png" alt=""><img class="mark ink" src="/brand/yuheng-ink.png" alt="玉衡"><img class="mark white" src="/brand/yuheng-white.png" alt="玉衡"><span class="brand-sub"><b>盘感训练</b><small>YUHENG v{{VERSION}}</small></span></h1><span class="sub" id="sub">5 分钟 K · 价格换算成最后一根收盘 = 100 · 股票和日期揭晓后才显示</span>
+    <div class="tabs"><button id="mJ" class="on">整体判断</button><button id="mS">逐根入场</button><button id="mC">C2 入场（1 分钟）</button></div></header>
+  <div class="grid">
+    <div class="card">
+      <canvas id="cv"></canvas>
+      <div class="bar">
+        <button class="stepbar primary" id="bStep">下一根 (→)</button>
+        <button class="long" id="bL">做多 (L)</button>
+        <button class="short" id="bS">做空 (S)</button>
+        <button id="bN"><span class="judgebar">不做 (N)</span><span class="stepbar">跳过这题 (N)</span></button>
+        <button class="primary" id="bGo" disabled><span class="judgebar">揭晓 (Enter)</span><span class="stepbar">确认入场 (Enter)</span></button>
+        <button class="stepbar" id="bAll" style="display:none">直接看结果 (A)</button>
+        <button id="bVW" title="显示 / 隐藏 VWAP（V）">VWAP (V)</button>
+        <button id="bNext" style="display:none">下一题 (空格)</button>
+        <span class="hint" id="hint">先选方向。选了做多 / 做空后，在图上点一下设止损，再点一下设目标（都可以不点：默认止损 1.5 倍平均K线、目标 2 倍风险；目标至少 1 倍风险）。</span>
+      </div>
+    </div>
+    <div>
+      <div class="card" id="result" style="margin-bottom:14px;display:none"></div>
+      <div class="card"><h3>我的统计 · 整体判断</h3><div id="stats" class="kv"></div></div>
+      <div class="card" style="margin-top:14px"><h3>我的统计 · 逐根入场</h3><div id="stats2" class="kv"></div></div>
+      <div class="card" style="margin-top:14px"><h3>我的统计 · C2 入场（和程序对照）</h3><div id="stats3" class="kv"></div></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+let MODE = "judge", SHOW_VW = true;
+const isStep = () => MODE !== "judge";
+try { SHOW_VW = localStorage.getItem("trainer_vwap") !== "0"; } catch (e) {}
+try { MODE = localStorage.getItem("trainer_mode") || "judge"; } catch (e) {}
+let Q = null, A = null, call = null, stop = null, target = null, busy = false;
+// 逐根模式
+let seen = [], phase = "watch", shown = 0;      // seen：翻出来的K线；phase：watch / setup / after / done；shown：入场后已显示几根
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const HINT_J = "先选方向。选了做多 / 做空后，在图上点一下设止损，再点一下设目标（都可以不点：默认止损 1.5 倍平均K线、目标 2 倍风险；目标至少 1 倍风险）。";
+const HINT_C = "C2 专项：已经给你开盘 6 根，最后一根（标「第6根」）是信号K。按「下一根」往后翻，等 C2 回踩 VWAP、出现确认组合再入场（最新一根收盘价成交）。11:00 前没机会就跳过。";
+const HINT_S = "只能在 Kill Zone（浅蓝底色）里入场。当天从开盘第一根开始。按「下一根」一根一根往后翻，觉得是入场点了就选做多 / 做空 → 点止损、点目标（可不点）→ 确认入场，按最新一根的收盘价成交。不想做就「跳过这题」。";
+
+function size(){ const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  cv.width = r.width * d; cv.height = r.height * d; ctx.setTransform(d,0,0,d,0,0); draw(); }
+addEventListener("resize", size);
+
+function visible(){                 // 现在图上画的全部K线（不透明的部分）
+  if (MODE === "judge") return Q.bars;
+  return Q.bars.concat(seen, A ? A.bars.slice(0, shown) : []);
+}
+function inZone(t){ if (!Q || !Q.zones) return true; const m = +t.slice(0, 2) * 60 + +t.slice(3, 5);
+  return Q.zones.some(([a, b]) => a < m && m <= b); }
+function lastBar(){ const v = visible(); return v[v.length - 1]; }
+function entryPx(){
+  if (MODE === "judge") return 100;
+  if (A && A.entry != null) return A.entry;
+  const v = visible(); return v[v.length - 1].c;
+}
+function geom(){
+  const W = cv.clientWidth, H = cv.clientHeight, padR = 56, padT = 12, padB = 22;
+  const n = (Q.c2 && phase !== "done") ? Math.min(Q.bars.length + Q.n_reveal, Math.max(96, visible().length + 12)) : Q.bars.length + Q.n_reveal, bw = (W - padR - 8) / n;
+  let all = MODE === "judge" ? Q.bars.concat(A ? A.bars : []) : (phase === "done" && A ? Q.bars.concat(seen, A.bars) : visible());
+  let lo = Math.min(...all.map(b => b.l)), hi = Math.max(...all.map(b => b.h));
+  [stop, target].forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+  const done = MODE === "judge" ? !!A : phase === "done";
+  const pad = (hi - lo) * (done ? 0.06 : 0.25); lo -= pad; hi += pad;
+  const y = p => padT + (hi - p) / (hi - lo) * (H - padT - padB);
+  const p = Y => hi - (Y - padT) / (H - padT - padB) * (hi - lo);
+  return {W, H, padR, padT, padB, bw, lo, hi, y, p, n};
+}
+
+function draw(){
+  const W = cv.clientWidth, H = cv.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  if (!Q) return;
+  const g = geom(), up = css("--up"), down = css("--down"), line = css("--line"), muted = css("--muted"), ink = css("--ink");
+  const nVis = MODE === "judge" ? Q.bars.length : visible().length;
+  const xNow = 4 + nVis * g.bw;
+  if (MODE === "judge" ? !A : phase !== "done") { ctx.fillStyle = css("--hide"); ctx.fillRect(xNow, g.padT, Math.max(0, W - g.padR - xNow), H - g.padT - g.padB); }
+  // Kill Zone 底色（只画当天）
+  if (Q.zones) { const lastD = Q.bars[Q.bars.length - 1].d, first = Q.bars.findIndex(b => b.d === lastD);
+    const day = Q.bars.slice(first).map(b => b.t).concat(MODE === "judge" ? (A ? A.bars.map(b => b.t) : []) : seen.map(b => b.t).concat(A ? A.bars.map(b => b.t) : []));
+    const total = Q.bars.length - first + Q.n_reveal;          // 当天全部K线（没翻出来的也画出 Kill Zone 位置）
+    ctx.fillStyle = css("--kz"); let runStart = -1;
+    for (let j = 0; j < Math.max(day.length, total); j++) {
+      const t = day[j] || (() => { const m0 = +day[0].slice(0, 2) * 60 + +day[0].slice(3, 5) + (Q.c2 ? 1 : 5) * j; return String(Math.floor(m0 / 60)).padStart(2, "0") + ":" + String(m0 % 60).padStart(2, "0"); })();
+      const z = inZone(t);
+      if (z && runStart < 0) runStart = j;
+      if ((!z || j === Math.max(day.length, total) - 1) && runStart >= 0) { const end = z ? j + 1 : j;
+        { const x0 = 4 + (first + runStart) * g.bw, x1 = Math.min(4 + (first + end) * g.bw, W - g.padR); if (x1 > x0) ctx.fillRect(x0, g.padT, x1 - x0, H - g.padT - g.padB); } runStart = -1; } }
+    ctx.fillStyle = muted; }
+  ctx.font = "11px -apple-system, sans-serif"; ctx.fillStyle = muted; ctx.strokeStyle = line; ctx.lineWidth = 1;
+  const step = niceStep((g.hi - g.lo) / 6);
+  for (let v = Math.ceil(g.lo / step) * step; v <= g.hi; v += step) {
+    const yy = Math.round(g.y(v)) + .5; ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - g.padR, yy); ctx.stroke();
+    ctx.fillText(v.toFixed(step < 0.1 ? 2 : 1), W - g.padR + 6, yy + 4);
+  }
+  // 分日线
+  let prevD = null; const lastD = Q.bars[Q.bars.length - 1].d;
+  Q.bars.forEach((b, i) => { if (b.d !== prevD) { const x = 4 + i * g.bw;
+      if (prevD !== null) { ctx.strokeStyle = muted; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(x, g.padT); ctx.lineTo(x, H - g.padB); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.fillStyle = muted; ctx.fillText(b.d === lastD ? "当天" : "前一天", x + 3, H - 6); prevD = b.d; } });
+  const candle = (b, i, alpha) => { const x = 4 + i * g.bw, c = b.c >= b.o ? up : down;
+    ctx.globalAlpha = alpha; ctx.strokeStyle = c; ctx.fillStyle = c;
+    ctx.beginPath(); ctx.moveTo(x + g.bw / 2, g.y(b.h)); ctx.lineTo(x + g.bw / 2, g.y(b.l)); ctx.stroke();
+    const top = g.y(Math.max(b.o, b.c)), h = Math.max(1, Math.abs(g.y(b.o) - g.y(b.c)));
+    ctx.fillRect(x + g.bw * 0.15, top, Math.max(1, g.bw * 0.7), h); ctx.globalAlpha = 1; };
+  Q.bars.forEach((b, i) => candle(b, i, 1));
+  if (MODE === "judge") { if (A) A.bars.forEach((b, i) => candle(b, Q.bars.length + i, 0.55)); }
+  else {
+    seen.forEach((b, i) => candle(b, Q.bars.length + i, 1));
+    if (A) A.bars.slice(0, shown).forEach((b, i) => candle(b, Q.bars.length + seen.length + i, phase === "done" ? 0.55 : 1));
+    if (phase === "done" && A) A.bars.slice(shown).forEach((b, i) => candle(b, Q.bars.length + seen.length + shown + i, 0.35));
+  }
+  if (Q.c2) { const i = 5, b = Q.bars[i], x = 4 + i * g.bw + g.bw / 2;
+    ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.moveTo(x, g.y(b.l) + 6); ctx.lineTo(x - 5, g.y(b.l) + 14); ctx.lineTo(x + 5, g.y(b.l) + 14); ctx.fill();
+    ctx.fillText("第6根", x - 14, g.y(b.l) + 26); }
+  // VWAP：每天开盘重新算，按天分段画
+  if (SHOW_VW) {
+    let seq = [];
+    if (MODE === "judge") seq = Q.bars.map((b, i) => [b, i, 1]).concat(A ? A.bars.map((b, i) => [b, Q.bars.length + i, 0.55]) : []);
+    else { seq = Q.bars.concat(seen).map((b, i) => [b, i, 1]);
+      if (A) A.bars.forEach((b, i) => { if (i < shown || phase === "done") seq.push([b, Q.bars.length + seen.length + i, i < shown ? 1 : 0.45]); }); }
+    ctx.strokeStyle = css("--vwap"); ctx.lineWidth = 1.6;
+    let prev = null;
+    seq.forEach(([b, i, al]) => {
+      if (b.vw == null) { prev = null; return; }
+      const x = 4 + i * g.bw + g.bw / 2, yy = g.y(b.vw);
+      const newDay = prev && b.d != null && prev.b.d != null && b.d !== prev.b.d;
+      const gap = prev && (b.t <= prev.b.t);                     // 时间倒回去 = 换了一天
+      if (prev && !newDay && !gap) { ctx.globalAlpha = al; ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(x, yy); ctx.stroke(); }
+      prev = {b, x, y: yy};
+    });
+    ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    const last = seq.filter(s => s[2] === 1 && s[0].vw != null).pop();
+    if (last) { const yy = g.y(last[0].vw); ctx.fillStyle = css("--vwap"); ctx.fillRect(W - g.padR + 1, yy - 7, g.padR - 2, 14);
+      ctx.fillStyle = "#fff"; ctx.fillText("VWAP", W - g.padR + 4, yy + 4); }
+  }
+  // 现在 / 入场时间线
+  const xLine = MODE === "judge" ? xNow : 4 + (Q.bars.length + seen.length) * g.bw;
+  ctx.strokeStyle = ink; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(xLine, g.padT); ctx.lineTo(xLine, H - g.padB); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = ink;
+  ctx.fillText(MODE === "judge" ? (A ? "揭晓" : "现在") : (A && A.call !== "不做" ? "入场" : (phase === "done" ? "你停在这" : "现在")), xLine + 4, g.padT + 12);
+  const hl = (v, col, lab) => { if (v == null) return; const yy = g.y(v); ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(xLine - 40, yy); ctx.lineTo(W - g.padR, yy); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = col; ctx.fillText(lab + " " + v.toFixed(2), xLine - 40, yy - 4); };
+  if (call === "多" || call === "空") { hl(entryPx(), ink, "入场"); hl(stop, down, "止损"); hl(target, up, "目标"); }
+  // 揭晓后：程序（C2 规则）在哪根确认
+  if (isStep() && phase === "done" && A && A.c2_rule) {
+    const all = Q.bars.concat(seen, A.bars), i = all.findIndex(b => b.t === A.c2_rule.t);
+    if (i >= 0) { const x = 4 + i * g.bw + g.bw / 2, yy = g.y(A.c2_rule.entry);
+      ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.moveTo(x, yy - 7); ctx.lineTo(x + 7, yy); ctx.lineTo(x, yy + 7); ctx.lineTo(x - 7, yy); ctx.fill();
+      ctx.fillText("程序" + (A.c2_rule.dir === "多" ? "做多" : "做空") + " " + A.c2_rule.t, x + 9, yy - 8); }
+  }
+  // 揭晓后：当天最理想的入场点
+  if (isStep() && phase === "done" && A && A.ideal) {
+    const dirs = (A.call === "多" || A.call === "空") ? [A.call] : ["多", "空"];
+    dirs.forEach(dd => { const it = A.ideal[dd], i = Q.bars.length - 1 + it.idx, x = 4 + i * g.bw + g.bw / 2, yy = g.y(it.px);
+      ctx.strokeStyle = dd === "多" ? up : down; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, yy, 7, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = dd === "多" ? up : down; ctx.fillText("理想" + (dd === "多" ? "多" : "空") + " " + it.t, x + 9, yy + (dd === "多" ? 14 : -6)); });
+  }
+}
+function niceStep(x){ const p = Math.pow(10, Math.floor(Math.log10(x))), m = x / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+
+cv.addEventListener("click", e => {
+  if (!Q || A || !(call === "多" || call === "空")) return;
+  const r = cv.getBoundingClientRect(), v = geom().p(e.clientY - r.top), s = call === "多" ? 1 : -1, ep = entryPx();
+  if (stop == null) { if ((v - ep) * s < 0) stop = v; else hint("止损要点在入场价" + (s > 0 ? "下方" : "上方")); }
+  else if (target == null) { if ((v - ep) * s > 0) target = v; else hint("目标要点在入场价" + (s > 0 ? "上方" : "下方")); }
+  else { stop = null; target = null; }
+  draw();
+});
+
+function setBtns(){
+  const on = id => $(id).classList.add("on"), off = id => $(id).classList.remove("on");
+  ["bL","bS","bN"].forEach(off); if (call && call !== "不做") on(call === "多" ? "bL" : "bS"); else if (call === "不做" && MODE === "judge") on("bN");
+  if (MODE === "judge") return;
+  $("bStep").style.display = (phase === "watch" || phase === "setup" || phase === "after") ? "" : "none";
+  $("bStep").disabled = phase === "setup";
+  ["bL","bS","bN"].forEach(id => $(id).disabled = !(phase === "watch" || phase === "setup"));
+  if (phase === "watch" && Q && !inZone(lastBar().t)) { $("bL").disabled = true; $("bS").disabled = true; }
+  $("bGo").style.display = (phase === "watch" || phase === "setup") ? "" : "none"; $("bGo").disabled = phase !== "setup";
+  $("bAll").style.display = phase === "after" ? "" : "none";
+  $("bNext").style.display = phase === "done" ? "" : "none";
+}
+function pick(c){
+  if (busy || !Q) return;
+  if (MODE === "judge") { if (A) return; call = c; stop = null; target = null;
+    $("bGo").disabled = false; setBtns(); draw(); return; }
+  if (!(phase === "watch" || phase === "setup")) return;
+  if (c === "不做") { skip(); return; }
+  if (phase === "setup" && call === c) { call = null; stop = null; target = null; phase = "watch"; }   // 再点一次 = 取消
+  else { call = c; stop = null; target = null; phase = "setup"; hint("在图上点止损、再点目标（可不点），然后「确认入场」。再点一次同一个方向按钮 = 取消，继续往后翻。"); }
+  setBtns(); draw();
+}
+function hint(t){ $("hint").textContent = t; $("hint").className = "hint"; }
+
+function setMode(m){
+  MODE = m; try { localStorage.setItem("trainer_mode", m); } catch (e) {}
+  document.body.classList.toggle("step", m !== "judge");
+  $("mJ").classList.toggle("on", m === "judge"); $("mS").classList.toggle("on", m === "step"); $("mC").classList.toggle("on", m === "c2");
+  $("sub").textContent = m === "judge" ? "5 分钟 K · 大盘股 · Kill Zone 内出题 · 价格换算成最后一根收盘 = 100 · 股票和日期揭晓后才显示"
+    : m === "c2" ? "1 分钟 K · 大盘股 · 先给开盘 6 根（到信号K），之后一根根翻 · 9:36–11:00 可入场 · 揭晓时对照程序的 C2 规则"
+    : "5 分钟 K · 大盘股 · 前一天 + 当天逐根翻 · 只能在 Kill Zone（浅蓝底色）里入场";
+  load();
+}
+
+async function load(){
+  busy = true; A = null; call = null; stop = null; target = null; seen = []; phase = "watch"; shown = 0;
+  $("bGo").disabled = true; $("bGo").style.display = ""; $("bNext").style.display = "none"; $("result").style.display = "none";
+  ["bL","bS","bN"].forEach(id => $(id).disabled = false);
+  hint(MODE === "judge" ? HINT_J : MODE === "c2" ? HINT_C : HINT_S);
+  const r = await fetch("/api/new?mode=" + MODE).then(r => r.json());
+  busy = false;
+  if (r.error) { Q = null; draw(); hint(r.error); $("hint").className = "hint err"; return; }
+  Q = r; setBtns(); size(); showStats();
+}
+
+async function stepNext(){
+  if (!isStep() || !Q || busy) return;
+  if (phase === "after") { shown++; checkHit(); draw(); return; }
+  if (phase !== "watch") return;
+  busy = true;
+  const r = await fetch("/api/step?id=" + Q.id).then(r => r.json()).catch(() => ({error: "连不上盘感训练程序"}));
+  if (r.error === "not found") r.error = "盘感训练程序还是旧版本：关掉这个页面，在控制台重新点「盘感训练」就好。";
+  busy = false;
+  if (r.error) { hint(r.error); return; }
+  if (r.end) { hint("Kill Zone 已经结束，这题算不做。"); skip(); return; }
+  seen.push(r.bar); setBtns(); draw();
+  const z = inZone(r.bar.t);
+  if (!z) hint(`${r.bar.t} 不在 Kill Zone（浅蓝底色）里，不能入场，继续往后翻。`);
+  else if (!$("hint").textContent.startsWith("在图上")) hint(HINT_S);
+  if (r.left === 0) { hint("这是当天最后一根了。现在不入场就算不做。"); }
+}
+function checkHit(){            // 入场后一根根看：碰到止损 / 目标（或到收盘）就揭晓
+  const b = A.bars[shown - 1], s = A.call === "多" ? 1 : -1;
+  const hitStop = b && (s > 0 ? b.l <= A.stop : b.h >= A.stop), hitTg = b && (s > 0 ? b.h >= A.target : b.l <= A.target);
+  if (hitStop || hitTg || shown >= A.bars.length) finish();
+}
+
+async function submitStep(c){
+  busy = true;
+  const r = await fetch("/api/answer_step", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id: Q.id, call: c, stop, target})}).then(r => r.json());
+  busy = false;
+  if (r.error) { hint(r.error); return null; }
+  return r;
+}
+async function enter(){
+  if (phase !== "setup" || busy) return;
+  const r = await submitStep(call); if (!r) { phase = "watch"; call = null; stop = null; target = null; setBtns(); draw(); return; }
+  A = r; stop = r.stop; target = r.target; call = r.call;
+  if (call === "不做") { finish(); return; }
+  phase = "after"; shown = 0; setBtns(); draw();
+  hint(`已在 ${r.entry_t} 入场（${r.entry.toFixed(2)}）。按「下一根」看这笔单怎么走，或者「直接看结果」。`);
+}
+async function skip(){
+  if (busy) return;
+  call = "不做"; stop = null; target = null;
+  const r = await submitStep("不做"); if (!r) return;
+  A = r; finish();
+}
+function finish(){
+  phase = "done"; setBtns(); draw();
+  hint("圆圈是当天事后看最理想的入场点。按空格或「下一题」继续。");
+  const r = A, box = $("result"); box.style.display = "";
+  const f2 = x => (x >= 0 ? "+" : "") + x.toFixed(2);
+  let html;
+  if (r.call === "多" || r.call === "空") {
+    const it = r.ideal[r.call], diff = it.idx - r.wait;
+    html = `<div class="res ${r.correct === 1 ? "win" : r.correct === 0 ? "lose" : ""}">${r.hit === "目标" ? "✓ 先到目标" : r.hit === "失效" ? "✗ 先到止损" : "到收盘都没碰到"}　${r.r != null ? f2(r.r) + " R" : ""}</div>
+      <div class="kv"><span>股票</span><span>${r.code}</span><span>日期</span><span>${r.date}</span>
+      <span>入场</span><span>${r.call === "多" ? "做多" : "做空"} ${r.entry_t}（等了 ${r.wait} 根）</span>
+      <span>止损 / 目标</span><span>${r.stop.toFixed(2)} / ${r.target.toFixed(2)}（${r.rr.toFixed(1)} 倍）</span>
+      ${r.mae_r != null ? `<span>入场后最大逆向</span><span>${r.mae_r.toFixed(2)} R</span>` : ""}
+      ${r.mfe_r != null ? `<span>入场后最大顺向</span><span>${r.mfe_r.toFixed(2)} R</span>` : ""}
+      <span>当天理想入场</span><span>${it.t}，${it.px.toFixed(2)}（${diff === 0 ? "就是你这根" : diff > 0 ? "比你晚 " + diff + " 根" : "比你早 " + (-diff) + " 根"}）</span>
+      <span>之后走到</span><span>${it.ext.toFixed(2)}（${it.ext_t}）</span></div>`;
+  } else {
+    const L = r.ideal["多"], S = r.ideal["空"];
+    html = `<div class="res">这题你没做</div><div class="kv"><span>股票</span><span>${r.code}</span><span>日期</span><span>${r.date}</span>
+      <span>理想做多</span><span>${L.t} ${L.px.toFixed(2)} → ${L.ext_t} ${L.ext.toFixed(2)}</span>
+      <span>理想做空</span><span>${S.t} ${S.px.toFixed(2)} → ${S.ext_t} ${S.ext.toFixed(2)}</span></div>`;
+  }
+  box.innerHTML = html + `<p class="hint" style="margin:8px 0 0">${r.rule}${r.rule_dir && (r.call === "多" || r.call === "空") ? (r.rule_dir === r.call ? "（和你一致）" : "（和你相反）") : ""}</p>
+    <p class="hint" style="margin:4px 0 0">圆圈 = 当天最理想的入场点（事后看的，只用来对照，别追求每次都抓到）${r.c2_rule ? "；蓝色菱形 = 程序按 C2 规则确认的那根" : ""}</p>`;
+  showStats(r.stats);
+}
+
+async function go(){
+  if (isStep()) { enter(); return; }
+  if (!Q || A || !call || busy) return; busy = true;
+  const r = await fetch("/api/answer", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({id: Q.id, call, stop, target})}).then(r => r.json());
+  busy = false;
+  if (r.error) { hint(r.error); return; }
+  A = r; stop = r.stop; target = r.target; draw();
+  $("bGo").style.display = "none"; $("bNext").style.display = "";
+  const box = $("result"); box.style.display = "";
+  let head;
+  if (call === "不做") head = `<div class="res">你选了不做</div>`;
+  else head = `<div class="res ${r.correct === 1 ? "win" : r.correct === 0 ? "lose" : ""}">${r.hit === "目标" ? "✓ 先到目标" : r.hit === "失效" ? "✗ 先到止损" : "到收盘都没碰到"}</div>`;
+  box.innerHTML = head + `<div class="kv">
+    <span>股票</span><span>${r.code}</span><span>日期</span><span>${r.date}</span>
+    ${r.rr ? `<span>止损 / 目标</span><span>${r.stop.toFixed(2)} / ${r.target.toFixed(2)}</span><span>盈亏比</span><span>${r.rr.toFixed(1)}</span>` : ""}
+    <span>之后最高</span><span>+${r.up.toFixed(2)}</span><span>之后最低</span><span>-${r.dn.toFixed(2)}</span>
+    <span>到收盘</span><span>${r.close_chg >= 0 ? "+" : ""}${r.close_chg.toFixed(2)}</span></div>
+    <p class="hint" style="margin:8px 0 0">${r.rule}${r.rule_dir && call !== "不做" ? (r.rule_dir === call ? "（和你一致）" : "（和你相反）") : ""}</p>`;
+  showStats(r.stats);
+}
+
+async function showStats(s){
+  s = s || await fetch("/api/stats").then(r => r.json());
+  const f = x => x.rate == null ? `${x.n} 题` : `${x.rate}%（${x.w} 对 / ${x.l} 错，共 ${x.n} 题）`;
+  $("stats").innerHTML = `<span>做过</span><span>${s.total} 题</span>
+    <span>方向题准确率</span><span>${f(s.dirs)}</span>
+    <span>做多</span><span>${f(s.long)}</span><span>做空</span><span>${f(s.short)}</span>
+    <span>和规则一致时</span><span>${f(s.agree)}</span><span>和规则相反时</span><span>${f(s.oppose)}</span>
+    <span>选了不做</span><span>${s.skip} 题${s.skip_sig.n ? `（其中有信号 ${s.skip_sig.n} 题，规则到目标 ${s.skip_sig.rule_win}）` : ""}</span>`;
+  const t = s.step || {}, r = x => x == null ? "—" : (x >= 0 ? "+" : "") + x + " R";
+  $("stats2").innerHTML = t.n ? `<span>做过</span><span>${t.n} 题（入场 ${t.trades}，跳过 ${t.skip}）</span>
+    <span>到目标 / 止损</span><span>${t.win} / ${t.loss}</span>
+    <span>平均每笔</span><span>${r(t.avg_r)}</span><span>累计</span><span>${r(t.sum_r)}</span>
+    <span>平均等了</span><span>${t.avg_wait ?? "—"} 根</span><span>入场后平均逆向</span><span>${t.avg_mae ?? "—"} R</span>
+    <span>开盘半小时内入场</span><span>${r(t.early)}</span><span>半小时后入场</span><span>${r(t.late)}</span>`
+    : `<span>还没做过</span><span></span>`;
+  const c = s.c2 || {};
+  $("stats3").innerHTML = c.n ? `<span>做过</span><span>${c.n} 题（入场 ${c.trades}，跳过 ${c.skip}）</span>
+    <span>你：平均每笔</span><span>${r(c.avg_r)}（累计 ${r(c.sum_r)}）</span>
+    <span>你：到目标 / 止损</span><span>${c.win} / ${c.loss}</span>
+    <span>你：平均等了</span><span>${c.avg_wait ?? "—"} 根　入场后逆向 ${c.avg_mae ?? "—"} R</span>
+    <span>程序：同样这些题</span><span>${c.rule_n} 次入场，平均 ${r(c.rule_avg)}（累计 ${r(c.rule_sum)}）</span>
+    <span>你和程序同方向时</span><span>${c.same} 笔，你平均 ${r(c.same_avg)}</span>`
+    : `<span>还没做过</span><span></span>`;
+}
+
+$("bL").onclick = () => pick("多"); $("bS").onclick = () => pick("空"); $("bN").onclick = () => pick("不做");
+$("bVW").onclick = () => toggleVW();
+function toggleVW(){ SHOW_VW = !SHOW_VW; try { localStorage.setItem("trainer_vwap", SHOW_VW ? "1" : "0"); } catch (e) {}
+  $("bVW").classList.toggle("on", SHOW_VW); draw(); }
+$("bVW").classList.toggle("on", SHOW_VW);
+$("bGo").onclick = go; $("bNext").onclick = load; $("bStep").onclick = stepNext;
+$("bAll").onclick = () => { if (phase === "after") { shown = A.bars.length; finish(); } };
+$("mJ").onclick = () => { if (MODE !== "judge") setMode("judge"); };
+$("mS").onclick = () => { if (MODE !== "step") setMode("step"); };
+$("mC").onclick = () => { if (MODE !== "c2") setMode("c2"); };
+addEventListener("keydown", e => {
+  if (e.key === "l" || e.key === "L") pick("多"); else if (e.key === "s" || e.key === "S") pick("空");
+  else if (e.key === "n" || e.key === "N") pick("不做"); else if (e.key === "Enter") go();
+  else if (e.key === "v" || e.key === "V") toggleVW();
+  else if ((e.key === "ArrowRight" || e.key === "d" || e.key === "D") && isStep()) { e.preventDefault(); stepNext(); }
+  else if ((e.key === "a" || e.key === "A") && isStep() && phase === "after") { shown = A.bars.length; finish(); }
+  else if (e.key === " " && ((MODE === "judge" && A) || (isStep() && phase === "done"))) { e.preventDefault(); load(); }
+});
+setMode(MODE);
+</script>
+</body>
+</html>

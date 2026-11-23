@@ -1,16 +1,10 @@
-# 运行环境与缓存
-.venv/
+设置.json
+程序/data/
+程序/.venv/
 __pycache__/
-.pytest_cache/
-.claude/settings.local.json
-
-# 本机私有：真实配置（含账户 ID）、账户状态、交易日志、纪律锁
-config.toml
-state_*.json
-journal.csv
-lock.json
-STOP
-signals.json
-
-# 大体积分钟线缓存（可用 moomoo CLI 重新拉取）
-backtest/data/*_k8.json
+*.pyc
+网站/
+host_setup/
+.备份_改动前/
+*.app/
+.DS_Store

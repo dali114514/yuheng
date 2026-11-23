@@ -1,0 +1,92 @@
+/* 赛博像素主题：盯盘界面（8767）和控制台（8760）共用。只改外观，不改功能。 */
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=DotGothic16&display=swap");
+:root, :root:not([data-theme]){
+  --bg:#06050d;--panel:#0d0b1c;--ink:#d9fff7;--muted:#7f88b0;--line:#2b2558;
+  --up:#39ff88;--down:#ff2e63;--accent:#00e5ff;--vwap:#ffd400;--box:rgba(0,229,255,.10);--chip:#17133a;
+  --a:#39ff88;--b:#ffb000;--c:#7f88b0;--x:#ff2e63;--ok:#39ff88;--warn:#ffb000;--bad:#ff2e63;
+  --pink:#ff3df2;--glow-c:0 0 6px rgba(0,229,255,.55),0 0 18px rgba(0,229,255,.18);
+  --pix:"DotGothic16","PingFang SC","Hiragino Sans GB",sans-serif;
+  --num:"VT323","DotGothic16",ui-monospace,monospace;
+  --head:"Press Start 2P","DotGothic16",monospace;
+  color-scheme:dark;
+}
+html{background:var(--bg)}
+body{background:
+   radial-gradient(1200px 600px at 80% -10%,rgba(255,61,242,.10),transparent 60%),
+   radial-gradient(900px 500px at -10% 110%,rgba(0,229,255,.10),transparent 60%),
+   linear-gradient(rgba(43,37,88,.25) 1px,transparent 1px) 0 0/100% 24px,
+   linear-gradient(90deg,rgba(43,37,88,.25) 1px,transparent 1px) 0 0/24px 100%,
+   var(--bg) !important;
+  color:var(--ink);font-family:var(--pix) !important;letter-spacing:.2px}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0,rgba(0,0,0,.18) 1px,transparent 1px,transparent 3px);mix-blend-mode:multiply}
+h1{font-family:var(--head) !important;font-size:15px !important;color:var(--accent);text-shadow:0 0 8px var(--accent),2px 2px 0 var(--pink);letter-spacing:1px}
+h2,h3,.card h2,.sec h3{font-family:var(--pix);color:var(--accent);text-transform:uppercase;letter-spacing:1px}
+header{background:rgba(13,11,28,.85) !important;border-bottom:2px solid var(--accent) !important;box-shadow:0 2px 18px rgba(0,229,255,.25)}
+.card,.vd,.light,.ev{border-radius:0 !important;border:2px solid var(--line) !important;background:rgba(13,11,28,.88) !important;
+  box-shadow:4px 4px 0 rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,229,255,.06)}
+.card:hover,.light:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line)) !important}
+button,input,select,textarea{border-radius:0 !important;font-family:var(--pix) !important;background:#110e26 !important;border:2px solid var(--line) !important;color:var(--ink) !important}
+button:hover{border-color:var(--accent) !important;box-shadow:var(--glow-c);color:var(--accent) !important}
+button.on,.tabs button.on{background:var(--accent) !important;color:#000 !important}
+.chip,.tag,.grade,.pill,.verdict,.ch2 span,.tabs{border-radius:0 !important}
+.px,.hover,table,td,th,.clock,.kv2{font-family:var(--num);font-size:1.12em}
+.up,.ok{color:var(--up) !important;text-shadow:0 0 6px rgba(57,255,136,.45)}
+.down,.no,.bad{color:var(--down) !important;text-shadow:0 0 6px rgba(255,46,99,.45)}
+.vd .lbl{font-family:var(--head) !important;font-size:22px !important;line-height:1.5 !important}
+.vd.go{box-shadow:0 0 0 2px var(--up),0 0 26px rgba(57,255,136,.35) !important}
+.vd.stop{box-shadow:0 0 0 2px var(--down),0 0 26px rgba(255,46,99,.45) !important;animation:cy-pulse 1.2s steps(2) infinite}
+.row.sel{box-shadow:inset 4px 0 0 var(--accent),inset 0 0 22px rgba(0,229,255,.12) !important}
+.dot{border-radius:0 !important;box-shadow:0 0 6px currentColor}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)}
+::selection{background:var(--pink);color:#000}
+::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-thumb{background:var(--line)} ::-webkit-scrollbar-track{background:#08061a}
+
+/* ===== 作战面板：盈亏 + 纪律 + 持仓 ===== */
+.cy-panel{display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:12px;margin:12px 16px 0}
+.cy-wrap .cy-panel{margin:0 0 14px}
+@media (max-width:900px){.cy-panel{grid-template-columns:1fr}}
+.cy-box{border:2px solid var(--line);background:rgba(13,11,28,.92);padding:12px 14px;position:relative;box-shadow:4px 4px 0 rgba(0,0,0,.6)}
+.cy-box .cy-t{font-family:var(--head);font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px}
+.cy-pnl{display:flex;align-items:center;gap:14px}
+.cy-pnl canvas{image-rendering:pixelated;flex:none}
+.cy-big{font-family:var(--num);font-size:58px;line-height:.9}
+.cy-sub{font-family:var(--num);font-size:19px;color:var(--muted)}
+.cy-win{border-color:var(--up);box-shadow:0 0 0 1px var(--up),0 0 30px rgba(57,255,136,.35),4px 4px 0 #000}
+.cy-win .cy-big{color:var(--up);text-shadow:0 0 10px var(--up),3px 3px 0 #04381c}
+.cy-lose{border-color:var(--down);box-shadow:0 0 0 1px var(--down),0 0 30px rgba(255,46,99,.4),4px 4px 0 #000}
+.cy-lose .cy-big{color:var(--down);text-shadow:0 0 10px var(--down),3px 3px 0 #3d0716}
+.cy-flat .cy-big{color:var(--ink)}
+.cy-rules{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cy-rules span{font-size:11.5px;border:1px solid var(--line);padding:1px 6px;color:var(--vwap)}
+.cy-alarm{display:flex;gap:14px;align-items:center;border:3px solid var(--down);background:repeating-linear-gradient(45deg,rgba(255,46,99,.16) 0 14px,rgba(0,0,0,.35) 14px 28px);
+  padding:10px 14px;margin-bottom:10px;animation:cy-pulse 1s steps(2) infinite}
+.cy-alarm.warn{border-color:var(--warn);background:repeating-linear-gradient(45deg,rgba(255,176,0,.14) 0 14px,rgba(0,0,0,.35) 14px 28px);animation:none}
+.cy-bang{font-family:var(--head);font-size:64px;line-height:1;color:var(--down);text-shadow:0 0 14px var(--down),5px 5px 0 #000;flex:none;width:70px;text-align:center}
+.cy-alarm.warn .cy-bang{color:var(--warn);text-shadow:0 0 12px var(--warn),5px 5px 0 #000;font-size:46px}
+.cy-alarm ul{margin:0;padding-left:0;list-style:none;font-size:16px;font-weight:700}
+.cy-alarm li{margin:3px 0} .cy-alarm li::before{content:"▶ ";color:var(--down)} .cy-alarm.warn li::before{color:var(--warn)}
+.cy-pos{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.cy-card{border:2px solid var(--line);padding:9px 11px;background:#0a0818}
+.cy-card .hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cy-card .nm{font-family:var(--head);font-size:12px}
+.cy-card .st{font-family:var(--head);font-size:10px;padding:3px 6px;margin-left:auto}
+.cy-card.stop{border-color:var(--down);animation:cy-pulse 1s steps(2) infinite} .cy-card.stop .st{background:var(--down);color:#000}
+.cy-card.warn{border-color:var(--warn)} .cy-card.warn .st{background:var(--warn);color:#000}
+.cy-card.good{border-color:var(--up);box-shadow:0 0 16px rgba(57,255,136,.25)} .cy-card.good .st{background:var(--up);color:#000}
+.cy-card.info .st{background:var(--accent);color:#000}
+.cy-card .nums{font-family:var(--num);font-size:19px;display:flex;gap:12px;flex-wrap:wrap;margin:4px 0}
+.cy-card .act{font-size:13.5px;margin-top:4px}
+.cy-card .flag{display:inline-block;background:var(--down);color:#000;font-weight:700;padding:0 6px;margin:4px 6px 0 0;font-size:12px}
+.cy-rbar{position:relative;height:14px;background:#120f2c;border:1px solid var(--line);margin:6px 0 2px}
+.cy-rbar i{position:absolute;top:0;bottom:0}
+.cy-rbar .z{width:2px;background:var(--ink);opacity:.6}
+.cy-rbar .s{width:3px;background:var(--down);box-shadow:0 0 6px var(--down)}
+.cy-rbar .g{width:2px;background:var(--up);opacity:.8}
+.cy-rlab{display:flex;justify-content:space-between;font-family:var(--num);font-size:14px;color:var(--muted)}
+.cy-none{color:var(--muted);font-size:14px;padding:6px 0}
+.cy-closed{font-family:var(--num);font-size:16px;color:var(--muted);margin-top:8px}
+body.cy-red::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;box-shadow:inset 0 0 0 6px var(--down),inset 0 0 90px rgba(255,46,99,.45);animation:cy-pulse 1s steps(2) infinite}
+@keyframes cy-pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){*{animation:none !important}}
+.cy-pnl canvas{width:84px !important;height:84px !important;display:block}

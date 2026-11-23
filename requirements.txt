@@ -1,4 +1,0 @@
-moomoo-api
-pandas
-tzdata
-pytest

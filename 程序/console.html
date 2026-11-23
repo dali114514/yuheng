@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玉衡 v{{VERSION}} · 控制台</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png">
+<link rel="apple-touch-icon" href="/brand/icon-256.png">
+<style>
+:root{--bg:#f5f6f8;--panel:#fff;--ink:#15171c;--muted:#6b7280;--line:#e4e7eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--accent:#2563eb;--chip:#f1f3f6}
+@media (prefers-color-scheme: dark){:root{--bg:#0e1014;--panel:#161920;--ink:#e7e9ee;--muted:#98a1b0;--line:#272c36;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#60a5fa;--chip:#1e222b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:14px 18px 28px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+h1{font-size:18px;margin:0 6px 0 0}
+.clock{color:var(--muted)} .clock b{color:var(--ink);font-weight:600}
+.sp{flex:1}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+button:hover{border-color:var(--muted)} button:disabled{opacity:.45;cursor:default}
+button.run{border-color:var(--accent);color:var(--accent)}
+button.danger{color:var(--bad)}
+.lights{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+.light{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.light .n{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bad);flex:none}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)}
+.light .t{color:var(--muted);font-size:11.5px;margin-top:3px;word-break:break-all}
+.light button{margin-top:5px;font-size:12px;padding:2px 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.card h2 small{color:var(--muted);font-weight:400}
+.muted{color:var(--muted)} .empty{color:var(--muted);padding:4px 0}
+.b-多,.b-偏多{color:var(--ok)} .b-空,.b-偏空{color:var(--bad)}
+.theme{font-size:15px;font-weight:600;margin:2px 0 6px}
+ul{margin:4px 0 6px;padding-left:18px} li{margin:2px 0}
+.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 8px;font-size:12.5px;margin:2px 4px 2px 0}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--muted);font-weight:500;text-align:left;border-bottom:1px solid var(--line);padding:4px 6px}
+td{border-bottom:1px solid var(--line);padding:5px 6px;vertical-align:top}
+tr.dim td{color:var(--muted)}
+.tg{display:grid;grid-template-columns:62px 1fr;gap:6px 8px;align-items:start}
+.tg .gl{color:var(--muted);font-size:12px;padding-top:5px}
+.tg .bs{display:flex;flex-wrap:wrap;gap:6px}
+.tg input{font:inherit;width:74px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;background:var(--bg);color:var(--ink);text-transform:uppercase}
+.out{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.out .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.out .tabs{display:flex;gap:4px;flex-wrap:wrap}
+.out .tabs span{font-size:12px;padding:1px 7px;border-radius:6px;background:var(--chip);cursor:pointer}
+.out .tabs span.on{background:var(--accent);color:#fff}
+.out .tabs span.r::before{content:"● ";color:var(--warn)}
+.out .tabs span.on.r::before{color:#fff}
+pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--bg);border-radius:7px;padding:8px;max-height:420px;overflow:auto;margin:8px 0 0}
+textarea{width:100%;font:inherit;border:1px solid var(--line);border-radius:7px;padding:7px;background:var(--bg);color:var(--ink);min-height:52px;resize:vertical}
+.row{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
+details summary{cursor:pointer;font-weight:600;font-size:14px}
+.set{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;margin-top:10px}
+.set .lab{font-size:13px} .set .h{color:var(--muted);font-size:11.5px}
+.set input[type=text],.set input[type=number],.set select{font:inherit;border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--bg);color:var(--ink);width:150px}
+.grp{font-size:12px;color:var(--muted);font-weight:600;margin:10px 0 2px;grid-column:1/-1;border-top:1px solid var(--line);padding-top:8px}
+.sw{position:relative;width:38px;height:22px;display:inline-block}
+.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:22px;transition:.15s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.sw input:checked+span{background:var(--accent)} .sw input:checked+span:before{transform:translateX(16px)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:8px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+.toast.on{opacity:.92}
+</style>
+<link rel="stylesheet" href="/yuheng.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="brand" title="玉衡：北斗第五星。衡是秤杆，权衡轻重、冷静决策。"><img class="seal" src="/brand/seal-128.png" alt=""><img class="mark ink" src="/brand/yuheng-ink.png" alt="玉衡"><img class="mark white" src="/brand/yuheng-white.png" alt="玉衡"><span class="brand-sub"><b>玉衡5.0 · 控制台</b><small>YUHENG v{{VERSION}}</small></span></h1>
+    <span class="clock" id="clock"></span>
+    <span class="sp"></span>
+    <button onclick="location.href='/lib'">策略库</button>
+    <button onclick="act('dash')">盯盘界面</button>
+    <button onclick="act('trainer')">盘感训练</button>
+    <button onclick="act('today_dir')">今日文件夹</button>
+    <button onclick="act('data')">数据</button>
+    <button onclick="act('reports')">报告</button>
+    <button class="danger" onclick="quitAll()">退出</button>
+  </header>
+
+  <div id="cypanel" class="cy-wrap"></div>
+  <div class="lights" id="lights"></div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>工具 <small>点了就在后台跑，输出显示在下面</small></h2>
+        <div class="tg" id="tools"></div>
+        <details style="margin-top:10px"><summary style="font-size:12.5px;font-weight:500;color:var(--muted)">维护（平时都是自动的）</summary><div class="tg" id="tools2" style="margin-top:8px"></div></details>
+        <div class="out" id="out" hidden>
+          <div class="hd"><div class="tabs" id="tabs"></div><span class="sp"></span><button id="stopBtn" class="danger" onclick="stopTool()" hidden>停止</button></div>
+          <pre id="outText"></pre>
+        </div>
+      </div>
+      <div class="card">
+        <h2>早盘 C2（1 分钟图） <small id="c2Meta"></small></h2>
+        <div id="c2"></div>
+        <div class="muted" id="c2Bt" style="font-size:12px;margin-top:6px"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>今天的打法和纪律 <small id="planDay"></small></h2>
+        <div id="plan"><div class="empty">加载中……</div></div>
+      </div>
+      <div class="card">
+        <h2>今日交易 <small id="riskLine"></small></h2>
+        <div id="trades"></div>
+        <div id="callBox"></div>
+      </div>
+      <div class="card">
+        <details><summary>设置 <small class="muted" style="font-weight:400">改完立即生效</small></summary><div class="set" id="settings"></div></details>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const api = (p, body) => fetch(p, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {}).then(r => r.json());
+function toast(t){ const e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove("on"), 2400); }
+
+async function act(name, extra){
+  const r = await api("/api/action", Object.assign({name}, extra || {}));
+  if (r.error) return toast(r.error);
+  toast(r.msg || {restart_bot:"正在重启机器人", sync_now:"开始同步到 E 盘", trainer:"正在打开盘感训练", dash:"正在打开盯盘界面"}[name] || "好");
+  setTimeout(loadStatus, 600);
+}
+function quitAll(){ if (confirm("退出会停止机器人、纪律程序、热数据和所有定时任务。确定退出？")) api("/api/action", {name:"quit"}).then(() => { document.body.innerHTML = "<div class='wrap'><h1>已退出</h1><p class='muted'>可以关掉这个窗口了。再次双击「玉衡5.0.app」重新打开。</p></div>"; }); }
+
+// ---------- 工具
+let TOOLS = [], SHOW = null, JOBS = {};
+async function loadTools(){
+  TOOLS = await api("/api/tools");
+  const render = gs => gs.map(g => `<div class="gl">${esc(g)}</div><div class="bs">${TOOLS.filter(t => t.group === g).map(t =>
+    (t.input ? `<input id="in_${t.key}" placeholder="NVDA" onkeydown="if(event.key==='Enter')runTool('${t.key}')">` : "") +
+    `<button id="tb_${t.key}" title="${esc(t.help)}" onclick="runTool('${t.key}')">${esc(t.label)}</button>`).join("")}</div>`).join("");
+  const groups = [...new Set(TOOLS.map(t => t.group))];
+  $("tools").innerHTML = render(groups.filter(g => g !== "维护"));
+  $("tools2").innerHTML = render(groups.filter(g => g === "维护"));
+}
+async function runTool(key){
+  const t = TOOLS.find(x => x.key === key);
+  if (t && /收费|推送|很慢/.test(t.help) && !confirm(`「${t.label}」：${t.help}。确定运行？`)) return;
+  const code = t && t.input ? ($("in_" + key).value || "") : undefined;
+  const r = await api("/api/action", {name:"tool", key, code});
+  if (r.error) return toast(r.error);
+  SHOW = key; toast(r.msg); setTimeout(loadStatus, 400);
+}
+function stopTool(){ if (SHOW && confirm("停止这个任务？")) api("/api/action", {name:"tool_stop", key:SHOW}).then(() => setTimeout(loadStatus, 600)); }
+function showJob(k){ SHOW = k; renderJobs(); }
+function renderJobs(){
+  const keys = Object.keys(JOBS).filter(k => TOOLS.some(t => t.key === k));
+  for (const t of TOOLS) { const b = $("tb_" + t.key); if (b) { const r = JOBS[t.key] && JOBS[t.key].running; b.disabled = !!r; b.classList.toggle("run", !!r); } }
+  if (!keys.length) { $("out").hidden = true; return; }
+  if (!SHOW || !JOBS[SHOW]) SHOW = keys.sort((a, b) => (JOBS[b].start || "").localeCompare(JOBS[a].start || ""))[0];
+  $("out").hidden = false;
+  $("tabs").innerHTML = keys.map(k => `<span class="${k === SHOW ? "on" : ""} ${JOBS[k].running ? "r" : ""}" onclick="showJob('${k}')">${esc(JOBS[k].label || k)}</span>`).join("");
+  const j = JOBS[SHOW], pre = $("outText"), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30;
+  pre.textContent = (j.running ? `运行中（${j.start} 开始）……\n\n` : `${j.ok ? "✓ 完成" : "✗ 失败"}（${j.start}–${j.end}）\n\n`) + (j.out || "");
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+  $("stopBtn").hidden = !j.running;
+}
+
+// ---------- 状态灯
+async function loadStatus(){
+  let s; try { s = await api("/api/status"); } catch(e) { $("clock").innerHTML = "<b style='color:var(--bad)'>控制台已停止</b>"; return; }
+  $("clock").innerHTML = `美东 <b>${s.et}</b>（${s.session}）　本地 ${s.local}`;
+  $("lights").innerHTML = s.lights.map(l => {
+    const cls = l.ok ? "ok" : (l.warn ? "warn" : "");
+    let btn = "";
+    if (l.key === "sync" && !l.off) btn = `<button onclick="act('sync_now')">立即同步</button>`;
+    if (l.key === "bot") btn = `<button onclick="act('restart_bot')">重启</button>`;
+    return `<div class="light"><div class="n"><span class="dot ${cls}"></span>${esc(l.name)}</div><div class="t">${esc(l.text)}</div>${btn}</div>`;
+  }).join("");
+  const was = Object.values(JOBS).filter(j => j.running).length;
+  JOBS = s.jobs || {};
+  renderJobs();
+  if (was && !Object.values(JOBS).some(j => j.running)) loadToday();
+}
+
+// ---------- 今日
+async function loadToday(){
+  const d = await api("/api/today");
+  $("planDay").textContent = `（${d.day}，美东）`;
+  const p = d.plan;
+  const packLine = d.pack ? `盘前报告：${esc(d.pack)} 生成（<a href="#" onclick="act('today_dir');return false">打开今日文件夹</a>）` : `今天的盘前报告还没生成（美东 8:45 自动，或点左边「生成盘前报告」）`;
+  if (!p || (!p.names.length && !p.one)) $("plan").innerHTML = `<div class="empty">${packLine}<br>还没定今天的打法：在 Claude 里说「开始今天」，讨论完会写进纪律设置；说「锁定」后纪律程序开始弹窗。</div>`;
+  else {
+    const lim = p.lim || {};
+    $("plan").innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:6px">${packLine}</div>
+      <div><b class="b-${esc(p.bias)}">${esc(p.bias)}</b>，${esc(p.style)}打法　<span class="chip">${esc(p.state)}</span>${p.state !== "已锁定" ? `<span class="muted" style="font-size:12px">　（草稿只显示，不弹窗）</span>` : ""}</div>
+      ${p.one ? `<div class="theme" style="font-size:14px;margin-top:4px">${esc(p.one)}</div>` : ""}
+      ${p.names.length ? `<table style="margin-top:6px"><tr><th>代码</th><th>方向</th><th>入场</th><th>关键价位</th><th>认错价</th></tr>${p.names.map(w => `<tr><td><b>${esc(w.code)}</b></td><td class="b-${esc(w.dir)}">${esc(w.dir)}</td><td>${esc(w.entry || "")}</td><td>${esc(w.levels.join("；"))}</td><td>${esc(w.stop ?? "")}</td></tr>`).join("")}</table>` : ""}
+      <div class="muted" style="font-size:12px;margin-top:6px">最多 ${esc(lim.最多笔数 ?? "—")} 笔 · 单笔最多亏 $${esc(lim.单笔最大亏损_美元 ?? "—")} · 单日最多亏 $${esc(lim.单日最大亏损_美元 ?? "—")} · ${esc(lim.最晚开仓 ?? "—")} 后不开新仓${lim.只做名单内 ? " · 只做名单内" : ""}${lim.只做名单方向 ? " · 只做名单方向" : ""}</div>`;
+  }
+  $("riskLine").textContent = d.risk || "";
+  const tr = d.trades || [];
+  $("trades").innerHTML = tr.length ? `<table><tr><th>时间</th><th>合约</th><th>张数</th><th>盈亏</th><th>对照纪律</th></tr>${tr.map(t => `<tr><td>${esc(t.open)}${t.close ? "–" + esc(t.close) : ""}</td><td>${esc(t.c)}</td><td>${esc(t.qty)}</td>
+      <td style="color:${(t.pnl || 0) >= 0 ? "var(--ok)" : "var(--bad)"}">${t.pnl == null ? "未平" : (t.pnl >= 0 ? "+" : "-") + "$" + Math.abs(t.pnl).toFixed(0)}</td>
+      <td>${esc(t.tag)}${t.note ? `<div class="muted">${esc(t.note)}</div>` : ""}${t.reason ? `<div class="muted">原因：${esc(t.reason)}</div>` : ""}</td></tr>`).join("")}</table>`
+    : `<div class="empty">成交在收盘复盘后显示（每天美东 16:20 自动，或点「工具 → 收盘复盘」）。</div>`;
+  const cl = d.calls || [];
+  $("callBox").innerHTML = cl.length ? `<div class="muted" style="margin:10px 0 4px">今天的盘感判断</div><table>${cl.map(c => `<tr><td>${esc(c.t)}</td><td><b>${esc(c.code)}</b></td><td>${esc(c.v)}</td><td>${c.px != null ? (+c.px).toFixed(2) : ""}</td></tr>`).join("")}</table>` : "";
+}
+
+// ---------- C2
+async function loadC2(){
+  let d; try { d = await api("/api/c2"); } catch (e) { return; }
+  const order = {"入场": 0, "回踩中": 1, "C1": 2, "等信号": 3, "作废": 4, "过时": 5, "不做": 6};
+  const rows = Object.entries(d.codes || {}).sort((a, b) => (order[a[1].phase] ?? 9) - (order[b[1].phase] ?? 9));
+  $("c2Meta").textContent = d.date ? `（${d.date}　更新 ${d.at || ""}${d.note ? "　" + d.note : ""}）` : "";
+  const col = p => p === "入场" ? "var(--ok)" : p === "回踩中" ? "var(--accent)" : p === "C1" ? "var(--ink)" : "var(--muted)";
+  $("c2").innerHTML = rows.length ? `<table>` + rows.map(([c, v]) =>
+    `<tr><td style="font-weight:600">${esc(c)}</td><td style="color:${col(v.phase)};white-space:nowrap">${esc(v.phase)}${v.dir ? " · " + esc(v.dir) : ""}</td>
+     <td class="muted">${esc(v.reason || "")}${v.phase === "入场" && v.entry ? `<br>入场约 ${v.entry.toFixed(2)}　止损 ${v.stop.toFixed(2)}　目标 ${v.target.toFixed(2)}` : ""}</td></tr>`).join("") + `</table>`
+    : `<div class="empty">开盘后（美东 9:31 起）每分钟更新观察名单里每只股票走到 C1 / C2 哪一步。</div>`;
+  $("c2Bt").textContent = d.backtest ? "历史回测：" + d.backtest + "（只是参考，样本少时别当真）" : "";
+}
+
+// ---------- 设置 / 计划
+async function loadSettings(){
+  const s = await api("/api/settings");
+  let g = null, h = "";
+  for (const f of s) {
+    if (f.group !== g) { g = f.group; h += `<div class="grp">${esc(g)}</div>`; }
+    const id = "f_" + f.path.replace(/\W/g, "_");
+    let ctl;
+    if (f.type === "bool") ctl = `<label class="sw"><input type="checkbox" id="${id}" ${f.value ? "checked" : ""} onchange="save('${f.path}', this.checked)"><span></span></label>`;
+    else if (f.type === "select") ctl = `<select id="${id}" onchange="save('${f.path}', this.value)">${f.options.map(o => `<option ${o === f.value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    else { const v = f.type === "list" ? (f.value || []).join(", ") : (f.value ?? "");
+      ctl = `<input type="${f.type === "number" ? "number" : "text"}" id="${id}" value="${esc(v)}" placeholder="${f.type === "number" ? "留空" : ""}" onchange="save('${f.path}', this.value)">`; }
+    h += `<div><div class="lab">${esc(f.label)}</div>${f.help ? `<div class="h">${esc(f.help)}</div>` : ""}</div><div>${ctl}</div>`;
+  }
+  $("settings").innerHTML = h;
+}
+async function save(path, value){
+  const r = await api("/api/settings", {path, value});
+  if (r.error) { toast("没保存：" + r.error); loadSettings(); } else toast("已保存");
+}
+loadTools().then(loadStatus); loadToday(); loadSettings(); loadC2();
+setInterval(loadStatus, 3000); setInterval(loadToday, 30000); setInterval(loadC2, 15000);
+</script>
+<script src="/cyber.js"></script>
+<script>cyMount(document.getElementById("cypanel"), "/api/pos", 5);</script>
+</body>
+</html>
