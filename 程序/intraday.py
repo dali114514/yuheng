@@ -131,7 +131,7 @@ def load_1m(code):
     for path in (DB_LONG, DB):
         if not path.exists():
             continue
-        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        con = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
         try:
             parts.append(pd.read_sql_query(q, con, params=(code,)))
         finally:
@@ -569,7 +569,7 @@ def all_codes():
     codes = set()
     for path in (DB_LONG, DB):
         if path.exists():
-            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            con = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
             try:
                 codes |= {r[0] for r in con.execute("SELECT DISTINCT code FROM bars_1m")}
             finally:

@@ -33,7 +33,7 @@ def bars(code):
     for p in (LONG, SHORT):
         if not p.exists():
             continue
-        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        con = sqlite3.connect(Path(p).resolve().as_uri() + "?mode=ro", uri=True)
         try:
             d = pd.read_sql_query("SELECT ts, open, high, low, close, volume FROM bars_1m WHERE code = ? ORDER BY ts", con, params=[code])
         finally:
@@ -58,7 +58,7 @@ def daily_from(b):
 
 
 def codes_long():
-    con = sqlite3.connect(f"file:{LONG}?mode=ro", uri=True)
+    con = sqlite3.connect(Path(LONG).resolve().as_uri() + "?mode=ro", uri=True)
     try:
         return [r[0] for r in con.execute("SELECT code FROM bars_1m GROUP BY code HAVING COUNT(DISTINCT substr(ts,1,10)) > 200")]
     finally:

@@ -1115,7 +1115,7 @@ def build_symbol(code: str, rows: list[dict], vix: dict[str, float]) -> dict:
 # ================================================================ 数据：history.db 日线 + VIX
 
 def load_bars(codes=None) -> dict[str, list[dict]]:
-    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)      # 只读打开
+    con = sqlite3.connect(Path(DB).resolve().as_uri() + "?mode=ro", uri=True)      # 只读打开
     try:
         q = "SELECT code, substr(ts,1,10), open, high, low, close, volume FROM bars_1d"
         args = ()

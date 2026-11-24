@@ -115,7 +115,7 @@ def check():
     if not LONG.exists():
         print("还没有长期库")
         return
-    c = sqlite3.connect(f"file:{LONG}?mode=ro", uri=True)
+    c = sqlite3.connect(Path(LONG).resolve().as_uri() + "?mode=ro", uri=True)
     q = c.execute("SELECT DISTINCT substr(ts,1,10) d FROM bars_1m WHERE code='QQQ'").fetchall()
     qdays = {r[0] for r in q}
     print(f"QQQ 交易日 {len(qdays)}")

@@ -67,7 +67,7 @@ def prev_day_levels(codes):
     """{code: (前一天高, 前一天低)}（K 线库里最近一根日线）。"""
     out = {}
     try:
-        con = sqlite3.connect(f"file:{HERE / 'data' / 'history.db'}?mode=ro", uri=True)
+        con = sqlite3.connect(Path(HERE / 'data' / 'history.db').resolve().as_uri() + "?mode=ro", uri=True)
         today = str(dt.datetime.now(ET).date())
         for c in codes:
             r = con.execute("SELECT high, low FROM bars_1d WHERE code = ? AND ts < ? ORDER BY ts DESC LIMIT 1", (c, today)).fetchone()

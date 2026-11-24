@@ -33,7 +33,7 @@ HEAD = ["time_et", "open", "high", "low", "close", "volume", "session"]
 
 
 def _con():
-    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=30)
+    con = sqlite3.connect(Path(DB).resolve().as_uri() + "?mode=ro", uri=True, timeout=30)
     return con
 
 

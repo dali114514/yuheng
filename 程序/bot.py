@@ -109,8 +109,9 @@ def match(text):
 
 
 def opend_running():
-    r = subprocess.run(["pgrep", "-f", "moomoo_OpenD|OpenD.app|FutuOpenD"], capture_output=True, text=True)
-    return bool(r.stdout.strip())
+    import osutil
+    pat = re.compile(r"moomoo_OpenD|OpenD\.app|FutuOpenD|OpenD(\.exe)?$", re.I)
+    return any(pat.search(" ".join(cl)) for _, cl in osutil.list_procs())
 
 
 def latest_report():
@@ -423,29 +424,15 @@ async def auto_night_loop(client):
 
 
 def find_procs(script):
-    """这台电脑上所有运行「程序/<script>」的进程（不含自己和自己的父进程）。"""
-    r = subprocess.run(["pgrep", "-f", f"程序/{script}"], capture_output=True, text=True)
-    me = {os.getpid(), os.getppid()}
-    return [int(x) for x in r.stdout.split() if x.strip().isdigit() and int(x) not in me]
+    """这台电脑上所有运行「程序/<script>」的进程（不含自己和自己的父进程）。macOS / Windows / Linux 都能用。"""
+    import osutil
+    return osutil.find_script(script, exclude={os.getpid(), os.getppid()})
 
 
 def kill_all(script, wait=3.0):
-    """先礼后兵：SIGTERM，等几秒还在就 SIGKILL。返回清理掉的进程数。"""
-    pids = find_procs(script)
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except Exception:
-            pass
-    t0 = time.time()
-    while time.time() - t0 < wait and find_procs(script):
-        time.sleep(0.3)
-    for pid in find_procs(script):
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except Exception:
-            pass
-    return len(pids)
+    """先礼后兵：先请它退出，等几秒还在就强制结束。返回清理掉的进程数。"""
+    import osutil
+    return osutil.terminate(find_procs(script), wait)
 
 
 async def do_status(msg):

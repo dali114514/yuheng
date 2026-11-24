@@ -171,15 +171,9 @@ def write_status(day, note=""):
 
 
 def notify(title, text):
-    if sys.platform != "darwin":
-        return
-    import subprocess
-    t = text.replace('"', "'")[:200]
-    subprocess.Popen(["osascript", "-e", f'display notification "{t}" with title "{title}"'],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    snd = HERE / "sounds" / "alert.mp3"                     # 交易者选的提示音；没有就用系统声音
-    subprocess.Popen(["afplay", str(snd) if snd.exists() else "/System/Library/Sounds/Glass.aiff"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """系统通知 + 提示音（不挡操作）。macOS / Windows / Linux 都能用（osutil.popup）。"""
+    import osutil
+    osutil.popup(title, text, critical=False, sound=True)
 
 
 _PDH = {}

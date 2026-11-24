@@ -60,21 +60,9 @@ def cfg_all():
 
 
 def popup(title, msg, critical=True):
-    if sys.platform != "darwin":
-        print(f"[弹窗] {title}：{msg}")
-        return
-    if critical:
-        script = ['tell application "System Events"', "activate",
-                  'display alert (item 1 of argv) message (item 2 of argv) as critical buttons {"知道了"} default button "知道了"',
-                  "end tell"]
-        args = ["osascript", "-e", "on run argv"] + sum([["-e", x] for x in script], []) + ["-e", "end run", title, msg]
-        subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        snd = HERE / "sounds" / "alert.mp3"                 # 交易者选的提示音；没有就用系统声音
-        subprocess.Popen(["afplay", str(snd) if snd.exists() else "/System/Library/Sounds/Sosumi.aiff"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    t = msg.replace('"', "'")[:200]
-    subprocess.Popen(["osascript", "-e", f'display notification "{t}" with title "{title}"'],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """重要的：弹窗 + 提示音；一般的：系统通知。macOS / Windows / Linux 都能用（osutil.popup）。"""
+    import osutil
+    osutil.popup(title, msg, critical)
 
 
 def record(day, kind, code, detail):

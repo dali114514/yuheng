@@ -136,7 +136,7 @@ def _hist_day(code, day):
 
 def last_hist_day():
     import sqlite3
-    con = sqlite3.connect(f"file:{HERE / 'data' / 'history.db'}?mode=ro", uri=True)
+    con = sqlite3.connect(Path(HERE / 'data' / 'history.db').resolve().as_uri() + "?mode=ro", uri=True)
     try:
         r = con.execute("SELECT substr(ts,1,10) d FROM bars_1m WHERE code='QQQ' AND ts LIKE '% 15:59:00' ORDER BY ts DESC LIMIT 1").fetchone()
     finally:
@@ -737,10 +737,8 @@ def ts_url():
         return _TS.get("url")
     url = None
     try:                                   # 直接看网卡上有没有 Tailscale 的 100.x 地址（命令行工具有时读不到 App 的状态）
-        import re
-        import subprocess
-        r = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=5)
-        ips = [x for x in re.findall(r"inet (100\.\d+\.\d+\.\d+)", r.stdout) if ipaddress.ip_address(x) in TS_NETS[0]]
+        import osutil
+        ips = [x for x in osutil.local_ipv4() if x.startswith("100.") and ipaddress.ip_address(x) in TS_NETS[0]]
         url = f"http://{ips[0]}:{PORT}/" if ips else None
     except Exception:
         url = None

@@ -57,7 +57,7 @@ def research(cfg=None):
     codes = []
     try:
         import sqlite3
-        con = sqlite3.connect(f"file:{HERE / 'data' / 'history.db'}?mode=ro", uri=True)
+        con = sqlite3.connect(Path(HERE / 'data' / 'history.db').resolve().as_uri() + "?mode=ro", uri=True)
         codes = [r[0] for r in con.execute("SELECT DISTINCT code FROM bars_1d ORDER BY 1")]
         con.close()
     except Exception:

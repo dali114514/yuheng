@@ -55,7 +55,7 @@
 
 ## 三、怎么运行程序
 
-在项目根目录下运行。M 芯片 Mac 要用原生模式（否则 numpy 会出错）：
+在项目根目录下运行。M 芯片 Mac 要用原生模式（否则 numpy 会出错）。v5.7.0 起 Windows 也能用：双击 `玉衡5.0.bat`；手动跑命令用 `程序\.venv\Scripts\python`，先 `set PYTHONUTF8=1`。和系统有关的事（找 / 关进程、后台启动、弹窗 + 提示音、打开文件夹、防睡眠、网卡地址）统一走 `程序/osutil.py`，**不要再直接写 pgrep / osascript / afplay / killpg**：
 
 ```bash
 arch -arm64 程序/.venv/bin/python 程序/<脚本>.py
@@ -251,6 +251,7 @@ arch -arm64 程序/.venv/bin/python 程序/<脚本>.py
 6. 已知的坑：
    - 开盘前，moomoo 快照里的 `prev_close_price` 是「上上个」收盘，`last_price` 才是最近一个收盘。`today.premarket_quotes` 已经处理，别的地方算盘前涨跌也要注意。
    - 用 `pkill -f` 关进程时，模式会匹配到自己这条命令。用 `pgrep -f "[P]ython.*程序/xxx[.]py" | xargs kill`。
+   - 程序里找 / 关进程用 `osutil.find_script` / `osutil.terminate`（三个系统都能用）；打开数据库只读用 `Path(x).resolve().as_uri() + "?mode=ro"`（`f"file:{x}"` 在 Windows 盘符路径上会出错）。
    - 打开「玉衡5.0.app」会先关掉所有正在跑的程序进程再重开（`console.py → clean_start`）。测试控制台时要把它关掉，否则会把正在跑的程序全杀了。
    - 每次改动在 `使用说明.txt` 末尾追加说明；改了流程或打法，也要更新本文件和 `数据/Claude使用说明.md`。
 

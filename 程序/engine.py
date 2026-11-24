@@ -185,7 +185,7 @@ def day_rows(code, day, b, A, pc, s, zs):
 
 # ================================================================ 缓存
 def _con():
-    return sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=30)
+    return sqlite3.connect(Path(DB).resolve().as_uri() + "?mode=ro", uri=True, timeout=30)
 
 
 def db_last_day():

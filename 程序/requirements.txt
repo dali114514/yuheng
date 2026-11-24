@@ -7,3 +7,4 @@ openpyxl
 moomoo-api
 discord.py>=2.4
 scipy
+psutil

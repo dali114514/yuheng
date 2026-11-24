@@ -25,6 +25,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import osutil  # noqa: E402
 BASE = HERE.parent
 sys.path.insert(0, str(HERE))
 REPORT_DIR = BASE / "报告"
@@ -72,38 +74,22 @@ ARCH = _arch()
 
 
 def find_procs(script):
-    """正在用 Python 运行「程序/<script>」的进程（包括套在外面的 caffeinate）。只看命令行里提到文件名的不算。"""
-    pat = "[Pp]ython[0-9.]*[[:space:]]+[^[:space:]]*程序/" + script.replace(".", "[.]")
-    r = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True)
-    me = {os.getpid()}
-    return [int(x) for x in r.stdout.split() if x.strip().isdigit() and int(x) not in me]
+    """正在用 Python 运行「程序/<script>」的进程（包括套在外面的 caffeinate）。macOS / Windows / Linux 都能用（osutil）。"""
+    return osutil.find_script(script)
 
 
 def kill_all(script, wait=4.0):
-    pids = find_procs(script)
-    for p in pids:
-        try:
-            os.kill(p, signal.SIGTERM)
-        except Exception:
-            pass
-    t0 = time.time()
-    while time.time() - t0 < wait and find_procs(script):
-        time.sleep(0.3)
-    for p in find_procs(script):
-        try:
-            os.kill(p, signal.SIGKILL)
-        except Exception:
-            pass
-    return len(pids)
+    return osutil.terminate(find_procs(script), wait)
+
+
+CHILD_ENV = dict(PYTHONWARNINGS="ignore", PYTHONUNBUFFERED="1", PYTHONUTF8="1")   # UTF-8 模式：Windows 上读写中文文件不出错
 
 
 def spawn(script, outname):
     logf = (REPORT_DIR / outname).open("a", encoding="utf-8")
-    pre = ["caffeinate", "-i"] if sys.platform == "darwin" else []
-    pre += ARCH
+    pre = osutil.caffeinate_prefix() + ARCH
     return subprocess.Popen(pre + [PY, str(HERE / script)], cwd=str(BASE), stdout=logf, stderr=subprocess.STDOUT,
-                            stdin=subprocess.DEVNULL, start_new_session=True,
-                            env=dict(os.environ, PYTHONWARNINGS="ignore", PYTHONUNBUFFERED="1"))
+                            stdin=subprocess.DEVNULL, env=dict(os.environ, **CHILD_ENV), **osutil.detach_kwargs())
 
 
 class Supervisor:
@@ -550,7 +536,7 @@ def run_tool(key, code=None):
         if not code or len(code) > 10 or not all(ch.isalnum() or ch == "." for ch in code):
             return False, "先填股票代码，例如 NVDA"
         args = tuple(code if a == "{code}" else a for a in args)
-    cmd = (["caffeinate", "-i"] if sys.platform == "darwin" and heavy else []) + ARCH + [PY]
+    cmd = osutil.caffeinate_prefix(heavy) + ARCH + [PY]
     cmd += ["-c", args[1]] if args[0] == "-c" else [str(HERE / args[0])] + list(args[1:])
     title = label + (f" {code}" if code and "{code}" in TOOLS[key][2] else "")
     JOBS[key] = dict(running=True, label=title, start=dt.datetime.now().strftime("%H:%M:%S"), out="")
@@ -558,8 +544,8 @@ def run_tool(key, code=None):
     def go():
         try:
             p = subprocess.Popen(cmd, cwd=str(BASE), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                 text=True, encoding="utf-8", errors="replace", start_new_session=True,
-                                 env=dict(os.environ, PYTHONWARNINGS="ignore", PYTHONUNBUFFERED="1"))
+                                 text=True, encoding="utf-8", errors="replace",
+                                 env=dict(os.environ, **CHILD_ENV), **osutil.detach_kwargs())
             JOBS[key]["pid"] = p.pid
             for line in p.stdout:
                 JOBS[key]["out"] = (JOBS[key]["out"] + line)[-30000:]
@@ -578,10 +564,7 @@ def run_tool(key, code=None):
 def stop_tool(key):
     pid = JOBS.get(key, {}).get("pid")
     if pid and JOBS[key].get("running"):
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except Exception:
-            pass
+        osutil.kill_tree(pid)
         return True
     return False
 
@@ -592,7 +575,7 @@ def tools_view():
 
 def open_path(p):
     p.mkdir(parents=True, exist_ok=True)
-    subprocess.Popen(["open", str(p)] if sys.platform == "darwin" else ["xdg-open", str(p)])
+    osutil.open_path(p)
 
 
 def _trainer_current():
@@ -611,8 +594,8 @@ def open_trainer():
         log("盘感训练程序已更新，重启它")
         kill_all("trainer.py")
     if not find_procs("trainer.py"):
-        p = subprocess.Popen(ARCH + [PY, str(HERE / "trainer.py"), "--no-browser"], cwd=str(BASE), start_new_session=True,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p = subprocess.Popen(ARCH + [PY, str(HERE / "trainer.py"), "--no-browser"], cwd=str(BASE),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=dict(os.environ, **CHILD_ENV), **osutil.detach_kwargs())
         time.sleep(1.5)
     open_url("http://127.0.0.1:8765/")
 
@@ -633,8 +616,8 @@ def open_dash():
         log("盯盘界面程序已更新，重启它")
         kill_all("dash.py")
     if not find_procs("dash.py"):
-        subprocess.Popen(ARCH + [PY, str(HERE / "dash.py"), "--no-browser"], cwd=str(BASE), start_new_session=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(ARCH + [PY, str(HERE / "dash.py"), "--no-browser"], cwd=str(BASE),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=dict(os.environ, **CHILD_ENV), **osutil.detach_kwargs())
         time.sleep(2)
     open_url("http://127.0.0.1:8767/")
 
@@ -763,7 +746,7 @@ class H(BaseHTTPRequestHandler):
                     import sync
                     run_job("E盘同步", lambda: sync.run(load_cfg()))
                 elif a == "reports":
-                    subprocess.Popen(["open", str(REPORT_DIR)] if sys.platform == "darwin" else ["xdg-open", str(REPORT_DIR)])
+                    osutil.open_path(REPORT_DIR)
                 elif a == "quit":
                     self._send(200, {"ok": True})
                     quit_all()
@@ -777,11 +760,6 @@ class H(BaseHTTPRequestHandler):
             self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
 
-CLEAN_PATTERNS = [
-    "[Pp]ython[0-9.]*[[:space:]]+[^[:space:]]*程序/[^[:space:]]+[.]py",   # 程序/ 下的脚本（常驻程序、工具任务、旧控制台）
-    "insert[(]0, '程序'[)]",                                               # 控制台「工具」里用 -c 跑的任务
-    "caffeinate .*程序/",                                                  # 套在外面的 caffeinate
-]
 
 
 def clean_start():
@@ -799,29 +777,11 @@ def clean_start():
         while time.time() - t0 < 30 and _port("127.0.0.1", PORT):
             time.sleep(0.5)
 
-    def left():
-        pids = set()
-        for pat in CLEAN_PATTERNS:
-            r = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True)
-            pids |= {int(x) for x in r.stdout.split() if x.strip().isdigit()}
-        return pids - keep
-    pids = left()
-    names = []
-    for p in pids:
-        try:
-            cmd = subprocess.run(["ps", "-o", "command=", "-p", str(p)], capture_output=True, text=True).stdout.strip()
-            names.append(Path(cmd.split()[-1]).name if cmd else str(p))
-            os.kill(p, signal.SIGTERM)
-        except Exception:
-            pass
-    t0 = time.time()
-    while time.time() - t0 < 5 and left():
-        time.sleep(0.3)
-    for p in left():
-        try:
-            os.kill(p, signal.SIGKILL)
-        except Exception:
-            pass
+    # 程序/ 下的脚本（常驻程序、工具任务、旧控制台）、控制台「工具」里用 -c 跑的任务、套在外面的 caffeinate
+    found = osutil.find_all_program_procs(exclude=keep)
+    pids = [p for p, _ in found]
+    names = [n for _, n in found]
+    osutil.terminate(pids, wait=5.0)
     log("打开时清场：" + (f"关掉 {len(pids)} 个旧进程（{'、'.join(sorted(set(names)))}）" if pids else "没有旧进程"))
 
 
@@ -830,8 +790,7 @@ def main(open_window=True, supervise=True):
     clean_start()                                # 每次打开都从干净的状态开始
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     log("控制台启动")
-    if sys.platform == "darwin":
-        subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+    osutil.keep_awake()                          # 控制台开着时电脑不睡眠（macOS caffeinate / Windows 系统接口）
     signal.signal(signal.SIGTERM, lambda *a: quit_all())
     if supervise:
         threading.Thread(target=SUP.run, daemon=True).start()
