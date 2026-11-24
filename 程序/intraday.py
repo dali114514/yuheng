@@ -607,12 +607,14 @@ def build_index(log=print):
     """跨股票汇总：每组（入场, 止损, 止盈, 方向）在全部 / 每种开盘类型里，多少只股票样本内外都为正。"""
     syms = {}
     for f in sorted(OUT.glob("*.json")):
-        if f.name in ("index.json", "playbook.json"):
+        if f.name in ("index.json", "playbook.json", "sizing.json"):
             continue
         try:
             y = json.loads(f.read_text("utf-8"))
         except Exception:
             continue
+        if not isinstance(y, dict) or "combos" not in y:
+            continue                                    # 不是单只股票的结果（例如仓位方案回测的 sizing.json）
         if any(k.count("|") != 3 for k in list(y.get("combos", {}))[:3]):
             continue                                    # 旧格式（改三层之前）的结果不混进来
         syms[f.stem] = y

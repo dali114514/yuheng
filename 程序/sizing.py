@@ -430,21 +430,47 @@ def best_breaker(R, half, sc):
     return best
 
 
+def conclusions(res):
+    """「结论（先说）」：数字每次按这次的结果算，不写死。"""
+    names = dict(SCHEMES)
+    S = res["sets"]
+    g = lambda st, k: (S.get(st) or {}).get("res", {}).get(k)
+    L = ["## 结论（先说）", ""]
+    hi, ho = g("holdout", "in|one|None|None"), g("holdout", "out|one|None|None")
+    if hi and ho:
+        ok = ho["per_trade"] > 0
+        L.append(f"1. **{'按开盘类型挑「入场 + 出场」这套办法，在没看过的数据上还赚钱' if ok else '最重要的一条：按开盘类型挑「入场 + 出场」这套办法，在没看过的数据上不赚钱'}。** "
+                 f"只用 2019–2023 挑，同样的组合 2019–2023 只做 1 张每笔约 {_usd(hi['per_trade'])}、{hi['pos_months']} 个月赚钱；"
+                 f"到了 {res['split'][:4]} 起没看过的数据，每笔约 {_usd(ho['per_trade'])}、{ho['pos_months']} 个月赚钱。"
+                 "今日预案的挑法（C 组）挑的时候已经看过样本外，它好看不能算数。")
+    pi, po = g("personal", "in|one|None|None"), g("personal", "out|one|None|None")
+    if pi and po:
+        L.append(f"2. **个人策略 A / B 全部信号**（B 组）：只做 1 张每笔 样本内 {_usd(pi['per_trade'])}、样本外 {_usd(po['per_trade'])}。")
+    rows = [(sc, g("holdout", f"out|{sc}|None|None")) for sc, _ in SCHEMES]
+    rows = [(sc, m) for sc, m in rows if m]
+    if rows:
+        one = dict(rows).get("one")
+        worse = [names[sc] for sc, m in rows if one and m["total"] < one["total"] * 1.5 and one["total"] < 0 and sc in ("pyramid", "scale")]
+        L.append("3. **仓位方案改不了正负，只改亏多少、回撤多深**：张数越多，赚的组合赚得多、亏的组合亏得多。"
+                 + (f"样本外{'、'.join(worse)}把亏损放大了。" if worse else "")
+                 + f"广撒网滚仓平均 {dict(rows).get('roll', {}).get('avg_contracts', '—')} 张，很少走到加仓那一步。")
+        best = max(rows, key=lambda x: x[1]["max_dd"])
+        L.append(f"4. **样本外回撤最小的是「{names[best[0]]}」**（最大回撤 {_usd(best[1]['max_dd'])}、最差一天 {_usd(best[1]['worst_day'])}）。"
+                 "固定美元风险会把「止损一次每张就超过风险额」的信号直接跳过，所以笔数也少一些。")
+        if one:
+            L.append(f"5. 「只做 1 张」样本外最差一天 {_usd(one['worst_day'])}：贵的股票 1 张平值期权就是几千美元权利金，按美元风险定张数更稳。")
+    L.append("6. **熔断**：见各组最后的表——样本内挑出来的熔断，在样本外通常只把亏损和回撤改变几个百分点；亏损不怎么扎堆，熔断帮不了太多。")
+    L.append("")
+    return L
+
+
 def report(res):
     names = dict(SCHEMES)
     L = [f"# 仓位方案回测 · {dt.date.today()}", "",
          "程序：`程序/sizing.py`。三层的第三层：同样的入场和出场，换不同的「几张、加减、停手」，看盈亏、回撤怎么变。",
          f"样本内 2019–2023，样本外 {res['split']} 起。金额按**今天的期权价格水平**折算（每只股票平值 3 天期权现价），每次买卖扣 1% 价差 + 每张 $1。",
          f"每天最多 {DAY_TRADES} 笔、单日亏到 ${DAY_LOSS:.0f} 停（基本纪律）；试仓级的组合除广撒网滚仓外只做 1 张；每笔最多 {MAX_CONTRACTS} 张。", ""]
-    L += ["## 结论（先说）", "",
-          "1. **最重要的一条：按开盘类型挑「入场 + 出场」这套办法，在没看过的数据上不赚钱。** 只用 2019–2023 挑，同样的组合 2019–2023 只做 1 张每笔约 +$14、"
-          "34/59 个月赚钱；到了 2024 起没看过的数据，变成每笔约 −$27、只有 10/35 个月赚钱。今日预案的挑法（C 组）两段都赚，是因为挑的时候已经看过 2024 起的数据。",
-          "2. **个人策略 A / B 全部信号**（B 组）：两段都亏，只做 1 张每笔约 −$16 到 −$19。",
-          "3. **仓位方案改不了正负，只改亏多少、回撤多深**：张数越多亏得越多。金字塔和分批出场在亏钱的组合上把亏损放大 2–3 倍；"
-          "广撒网滚仓基本等于只做 1 张（平均 1.03 张，很少走到加仓那一步）。",
-          "4. **固定美元风险 $100 回撤最小、最差一天最小**（样本外最差一天约 −$360）。一部分原因是止损一次每张就超过 $100 的信号直接不做，笔数少了约 15%。",
-          "5. **熔断**：在样本内挑出来的大多是「连亏 2 笔停」（有时加上「赚到 $200 后回吐一半停」），样本外只把亏损和回撤少了 0–10%。亏损不怎么扎堆，熔断帮不了太多。",
-          "6. 「只做 1 张」最差一天也能到 −$2,900：贵的股票（平值 3 天期权几十美元）1 张就是几千美元的权利金。所以按美元风险定张数比按张数定更稳。", ""]
+    L += conclusions(res)
     titles = {"holdout": "A. 只用样本内挑的组合（样本外是真正没看过的数据）",
               "personal": "B. 只做个人策略 A / B（每个方向用样本内最好的出场，全部股票）",
               "playbook": "C. 今日预案现在的挑法（挑的时候看过样本外，偏乐观，只作参考）"}
