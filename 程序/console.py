@@ -673,11 +673,20 @@ class H(BaseHTTPRequestHandler):
                 if "/" in name or ".." in name or not f.is_file():
                     return self._send(404, {"error": "not found"})
                 self._send(200, f.read_bytes(), "image/png" if name.endswith(".png") else "image/x-icon")
+            elif self.path.split("?")[0] in ("/pre", "/premarket.html"):     # 盘前分析：每只股票一块，点开看形态概率
+                import version
+                self._send(200, version.page(HERE / "premarket.html"), "text/html; charset=utf-8")
+            elif self.path.split("?")[0] == "/api/pre":
+                import premarket
+                self._send(200, premarket.build(max_age=0 if "force=1" in self.path else 60))
             elif self.path.split("?")[0] in ("/lib", "/lib.html"):
                 import version
                 self._send(200, version.page(HERE / "lib.html"), "text/html; charset=utf-8")
             elif self.path == "/api/intraday":           # 日内策略库汇总（intraday.py 生成）
                 f = HERE / "data" / "日内策略库" / "index.json"
+                self._send(200, f.read_bytes() if f.exists() else {"missing": True})
+            elif self.path == "/api/sizing":             # 仓位方案回测（sizing.py 生成）
+                f = HERE / "data" / "日内策略库" / "sizing.json"
                 self._send(200, f.read_bytes() if f.exists() else {"missing": True})
             elif self.path == "/api/playbook":           # 今日预案（playbook.py 生成）
                 f = HERE / "data" / "策略库" / "playbook.json"

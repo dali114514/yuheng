@@ -287,13 +287,14 @@ def run_symbol(args):
             continue
         vw = I._vwap(h, l, c, v)
         tmin = g.index.hour.values * 60 + g.index.minute.values
+        dtype = I.day_type(o, h, l, c, float(row["atr_prev"]))
         for sid, i, d, struct, fa, fl in I.signals(g, row, qg.get(day), c2s):
             dd = "L" if d == 1 else "S"
             for (_, stp, tgt, lvl) in want.get((sid, dd), []):
                 t = simulate_trade(g, vw, tmin, i, d, struct, float(row["atr_prev"]), float(row["iv"]), prem_x, fa, fl,
                                    row["ph"], row["pl"], stp, tgt, lvl, p_now)
                 if t:
-                    t.update(date=str(day), code=code, sid=sid)
+                    t.update(date=str(day), code=code, sid=sid, dt=dtype)
                     rows.append(t)
     return code, rows
 
@@ -364,6 +365,21 @@ def metrics(s, n_tr, n_ct):
             "pos_months": f"{int((months > 0).sum())}/{len(months)}"}
 
 
+def by_daytype(rows):
+    """每种形态（收盘后才知道）里，每种仓位方案每笔平均赚亏多少（美元，逐笔、不按天限制）。事后看，不能当预测。"""
+    out = {}
+    for k, _ in I.DAYTYPES:
+        rs = [t for t in rows if t.get("dt") == k]
+        if not rs:
+            continue
+        out[k] = {"n": len(rs), "schemes": {}}
+        for sc, _ in SCHEMES:
+            v = [t[sc][0] for t in rs if t[sc][1] > 0]
+            out[k]["schemes"][sc] = {"n": len(v), "per_trade": round(float(np.mean(v)), 1) if v else None,
+                                     "win": round(float(np.mean([x > 0 for x in v])), 3) if v else None}
+    return out
+
+
 # ================================================================ 全部
 
 def run(log=print):
@@ -401,6 +417,7 @@ def run(log=print):
                     s, n, k = portfolio(rs, sc, st, gb)
                     R[f"{half}|{sc}|{st}|{gb}"] = metrics(s, n, k)
         result["sets"][name] = {"n_trades": len(rows), "picks": len(sets[name]), "res": R}
+    result["by_daytype"] = by_daytype(trades.get("holdout") or [])
     (ILIB / "sizing.json").write_text(json.dumps(result, ensure_ascii=False), "utf-8")
     md = report(result)
     p = BASE / "报告" / f"仓位方案回测_{dt.date.today()}.md"

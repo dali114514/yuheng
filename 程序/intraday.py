@@ -435,6 +435,34 @@ def option_return(day_df, e, x, px_in, px_out, d, iv):
     return np.asarray(p1) * (1 - HALF_SPREAD) / (p0 * (1 + HALF_SPREAD)) - 1, float(dl), p0
 
 
+# ================================================================ 当天的「形态」（收盘后才知道，用来统计概率和事后看哪组好）
+DAYTYPES = [("trend_up", "单边上涨"), ("trend_down", "单边下跌"), ("spike_fade", "冲高回落"), ("dip_rally", "探底回升"),
+            ("range_wide", "宽幅震荡"), ("range_narrow", "窄幅震荡")]
+DT_IDS = [k for k, _ in DAYTYPES]
+DAYTYPE_HOW = ("用常规时段整天的 1 分钟K分类（倍日线 ATR）：全天振幅 < 0.6 倍 ATR = 窄幅震荡；收盘 − 开盘 ≥ 0.4 倍 ATR 且收在全天上 25% = 单边上涨"
+               "（下跌反过来）；先到最高点、后到最低点且收在下 40% = 冲高回落；先到最低点、后到最高点且收在上 40% = 探底回升；其余 = 宽幅震荡。")
+
+
+def day_type(o, h, l, c, atr):
+    op, cl = o[0], c[-1]
+    hi, lo = h.max(), l.min()
+    R = hi - lo
+    if R < 0.6 * atr:
+        return "range_narrow"
+    pos = (cl - lo) / R
+    body = cl - op
+    if body >= 0.4 * atr and pos >= 0.75:
+        return "trend_up"
+    if body <= -0.4 * atr and pos <= 0.25:
+        return "trend_down"
+    ih, il = int(np.argmax(h)), int(np.argmin(l))
+    if ih < il and pos <= 0.4:
+        return "spike_fade"
+    if il < ih and pos >= 0.6:
+        return "dip_rally"
+    return "range_wide"
+
+
 # ================================================================ 一只股票
 
 GAP_IDS = [g for g, _ in GAPS]
@@ -463,7 +491,8 @@ def run_symbol(code, regimes=None, log=print):
     p_now = float(bs(last["close"], last["close"], (DTE_TRADING + 1) * 390 / YEAR_MIN, float(iv_last.iloc[-1]) if len(iv_last) else 0.4, True)[0])
     prem_x = float(min(0.6, max(0.05, 0.5 / p_now))) if p_now > 0 else 0.2
     sid_idx = {s["id"]: j for j, s in enumerate(STRATS)}
-    cols = {k: [] for k in ("date", "gap", "sid", "ex", "d", "ret", "r", "delta", "bars", "satr", "tnone")}
+    cols = {k: [] for k in ("date", "gap", "sid", "ex", "d", "ret", "r", "delta", "bars", "satr", "tnone", "dt")}
+    daylist = []
     for day, g in df.groupby(df.index.date):
         if day not in days.index:
             continue
@@ -476,6 +505,8 @@ def run_symbol(code, regimes=None, log=print):
         atr, iv = float(row["atr_prev"]), float(row["iv"])
         gcls = GAP_IDS.index(_gap_class((o[0] - row["pc"]) / atr))
         ds = str(day)
+        dtc = DT_IDS.index(day_type(o, h, l, c, atr))
+        daylist.append((ds, gcls, dtc))
         for sid, i, d, struct, fa, fl in signals(g, row, qg.get(day), c2s):
             r = exits(g, vw, tmin, i, d, struct, atr, iv, prem_x, fa, fl, row["ph"], row["pl"])
             if not r:
@@ -499,10 +530,29 @@ def run_symbol(code, regimes=None, log=print):
             cols["bars"].append(xs - e)
             cols["satr"] += [risk / atr] * k
             cols["tnone"] += [t for *_, t in res]
+            cols["dt"] += [dtc] * k
     for k in ("ret", "r", "bars"):
         cols[k] = np.concatenate(cols[k]) if cols[k] else np.array([])
     t = pd.DataFrame(cols)
-    return summarize_symbol(code, t, days, p_now, prem_x)
+    out = summarize_symbol(code, t, days, p_now, prem_x)
+    out["daytypes"] = summarize_daytypes(t, daylist)
+    return out
+
+
+def summarize_daytypes(t, daylist):
+    """形态：每种开盘里各形态出现的天数（全部 / 样本内 / 样本外），和每种形态里每组的笔数、收益合计（跨股票汇总用）。"""
+    freq = {}
+    for ds, g, dtc in daylist:
+        c = freq.setdefault(GAP_IDS[g], {}).setdefault(DT_IDS[dtc], [0, 0, 0])
+        c[0] += 1
+        c[1 if ds < SPLIT else 2] += 1
+    cells = {}
+    if not t.empty:
+        a = t.groupby(["dt", "sid", "ex", "d"]).agg(n=("ret", "size"), s=("ret", "sum"))
+        for (dtc, sid, ex, d), r in a.iterrows():
+            stp, tgt = EXITS[ex]
+            cells.setdefault(DT_IDS[dtc], {})[combo_key(STRATS[sid]["id"], stp, tgt, d)] = [int(r["n"]), round(float(r["s"]), 3)]
+    return {"freq": freq, "cells": cells}
 
 
 def _stats_frame(g):
@@ -607,7 +657,7 @@ def build_index(log=print):
     """跨股票汇总：每组（入场, 止损, 止盈, 方向）在全部 / 每种开盘类型里，多少只股票样本内外都为正。"""
     syms = {}
     for f in sorted(OUT.glob("*.json")):
-        if f.name in ("index.json", "playbook.json", "sizing.json"):
+        if f.name in ("index.json", "playbook.json", "sizing.json", "premarket.json"):
             continue
         try:
             y = json.loads(f.read_text("utf-8"))
@@ -653,8 +703,131 @@ def build_index(log=print):
            "symbols": {c: {k: y[k] for k in ("first", "last", "days", "has_in", "atr_now", "close_now", "iv_now", "premium_now", "prem_x")}
                        for c, y in syms.items()},
            "combos": rows}
+    try:
+        idx["layers"] = build_layers(syms)
+    except Exception as e:
+        log(f"（分层汇总出错：{type(e).__name__}: {e}）")
+    try:
+        idx["daytypes"] = build_daytypes(syms)
+    except Exception as e:
+        log(f"（形态汇总出错：{type(e).__name__}: {e}）")
     (OUT / "index.json").write_text(json.dumps(idx, ensure_ascii=False, separators=(",", ":")), "utf-8")
     return idx
+
+
+def build_layers(syms):
+    """策略库页面「入场 / 止损 / 止盈」三块用：每一层单独看（其他两层全部平均），全部股票按笔数加权，和随机入场比。"""
+    agg = {}
+    for y in syms.values():
+        for key, c in y["combos"].items():
+            k = tuple(key.split("|"))
+            for f in ("all", "in", "out"):
+                if c.get(f):
+                    a = agg.setdefault((k, f), [0, 0.0, 0.0])
+                    a[0] += c[f]["n"]
+                    a[1] += c[f]["n"] * c[f]["avg"]
+                    a[2] += c[f]["n"] * c[f]["win"]
+    keys = sorted({k for k, _ in agg})
+
+    def pooled(pred, f="all"):
+        n = s = w = 0
+        for k in keys:
+            if pred(k) and (k, f) in agg:
+                a = agg[(k, f)]
+                n += a[0]; s += a[1]; w += a[2]
+        return {"n": n, "avg": round(s / n, 4) if n else None, "win": round(w / n, 3) if n else None}
+
+    entries = []
+    for st in STRATS:
+        for dd in ("L", "S"):
+            sid = st["id"]
+            allx = pooled(lambda k: k[0] == sid and k[3] == dd)
+            best = None
+            for s_ in STOPS:
+                for t_ in TARGETS:
+                    i_ = pooled(lambda k: k == (sid, s_["id"], t_["id"], dd), "in")
+                    o_ = pooled(lambda k: k == (sid, s_["id"], t_["id"], dd), "out")
+                    if i_["avg"] is None or o_["avg"] is None:
+                        continue
+                    sc = min(i_["avg"], o_["avg"])
+                    if best is None or sc > best["score"]:
+                        best = {"score": sc, "stop": s_["id"], "tgt": t_["id"], "in": i_["avg"], "out": o_["avg"], "n": i_["n"] + o_["n"]}
+            entries.append({"sid": sid, "dir": dd, "n_per_exit": allx["n"] // max(len(EXITS), 1), "avg": allx["avg"], "win": allx["win"], "best": best})
+    stops = []
+    for s_ in STOPS:
+        a = pooled(lambda k: k[0] != "rand" and k[1] == s_["id"])
+        r = pooled(lambda k: k[0] == "rand" and k[1] == s_["id"])
+        i_ = pooled(lambda k: k[0] != "rand" and k[1] == s_["id"], "in")
+        o_ = pooled(lambda k: k[0] != "rand" and k[1] == s_["id"], "out")
+        stops.append({"id": s_["id"], "avg": a["avg"], "win": a["win"], "rand": r["avg"], "in": i_["avg"], "out": o_["avg"]})
+    tgts = []
+    for t_ in TARGETS:
+        row = {"id": t_["id"]}
+        for dd in ("L", "S"):
+            a = pooled(lambda k: k[0] != "rand" and k[2] == t_["id"] and k[3] == dd)
+            r = pooled(lambda k: k[0] == "rand" and k[2] == t_["id"] and k[3] == dd)
+            row[dd] = {"avg": a["avg"], "win": a["win"], "rand": r["avg"]}
+        tgts.append(row)
+    return {"entries": entries, "stops": stops, "targets": tgts}
+
+
+def build_daytypes(syms, min_n_pool=150, min_n_stock=12, shrink=20):
+    """跨股票汇总形态，并写 premarket.json（盘前分析页用）：
+       每只股票每种开盘下各形态的概率（自己的天数少时往全部股票的比例收缩），
+       每种形态里每个方向回测最好的几组（全部股票合起来 + 这只自己的）。形态是收盘后才知道的，「最好的组」是事后看的。"""
+    smeta = {s["id"]: s["name"] for s in STRATS}
+    stn = {s["id"]: s["name"] for s in STOPS}
+    tgn = {s["id"]: s["name"] for s in TARGETS}
+    pool_freq, pool_cells = {}, {}
+    for y in syms.values():
+        dt = y.get("daytypes") or {}
+        for g, m in (dt.get("freq") or {}).items():
+            for k, v in m.items():
+                pool_freq.setdefault(g, {}).setdefault(k, 0)
+                pool_freq[g][k] += v[0]
+        for k, m in (dt.get("cells") or {}).items():
+            pc = pool_cells.setdefault(k, {})
+            for key, (n, s) in m.items():
+                a = pc.setdefault(key, [0, 0.0])
+                a[0] += n
+                a[1] += s
+
+    def label(key):
+        sid, stp, tgt, dd = key.split("|")
+        return dict(key=key, sid=sid, stop=stp, tgt=tgt, dir=dd, name=smeta.get(sid, sid), stop_name=stn.get(stp, stp), tgt_name=tgn.get(tgt, tgt))
+
+    top_pool, rand_pool = {}, {}
+    for k, pc in pool_cells.items():
+        for dd in ("L", "S"):
+            rows = [(key, n, s / n) for key, (n, s) in pc.items() if key.endswith("|" + dd) and n >= min_n_pool]
+            rr = [r for r in rows if r[0].startswith("rand|")]
+            rand_pool.setdefault(k, {})[dd] = round(max((r[2] for r in rr), default=0.0), 4) if rr else None
+            best = sorted([r for r in rows if not r[0].startswith("rand|")], key=lambda r: -r[2])[:5]
+            top_pool.setdefault(k, {})[dd] = [dict(label(key), n=n, avg=round(a, 4)) for key, n, a in best]
+    pool_p = {g: {k: v / max(sum(m.values()), 1) for k, v in m.items()} for g, m in pool_freq.items()}
+    stocks = {}
+    for code, y in syms.items():
+        dt = y.get("daytypes") or {}
+        probs = {}
+        for g in GAP_IDS:
+            own = {k: v[0] for k, v in ((dt.get("freq") or {}).get(g) or {}).items()}
+            n = sum(own.values())
+            pp = pool_p.get(g) or {}
+            probs[g] = {"n": n, "p": {k: round((own.get(k, 0) + shrink * pp.get(k, 0)) / (n + shrink), 4) for k in DT_IDS}}
+        mine = {}
+        for k, m in (dt.get("cells") or {}).items():
+            for dd in ("L", "S"):
+                rows = [(key, n, s / n) for key, (n, s) in m.items() if key.endswith("|" + dd) and not key.startswith("rand|") and n >= min_n_stock]
+                mine.setdefault(k, {})[dd] = [dict(label(key), n=n, avg=round(a, 4)) for key, n, a in sorted(rows, key=lambda r: -r[2])[:3]]
+        stocks[code] = {"probs": probs, "top": mine, "days": y.get("days"), "atr": y.get("atr_now"), "close": y.get("close_now")}
+    pm = {"generated": dt_now(), "daytypes": [{"id": k, "name": n} for k, n in DAYTYPES], "how": DAYTYPE_HOW,
+          "pool_freq": pool_freq, "top_pool": top_pool, "rand_pool": rand_pool, "stocks": stocks}
+    (OUT / "premarket.json").write_text(json.dumps(pm, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    return {"daytypes": pm["daytypes"], "how": DAYTYPE_HOW, "pool_freq": pool_freq, "top_pool": top_pool, "rand_pool": rand_pool}
+
+
+def dt_now():
+    return dt.datetime.now().isoformat(timespec="seconds")
 
 
 if __name__ == "__main__":

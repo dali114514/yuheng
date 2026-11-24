@@ -97,6 +97,13 @@ td.num, th.num { text-align: right; }
 details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
 [hidden] { display: none !important; }
 .nav { display: flex; gap: 4px; margin-left: auto; }
+.boards { position: sticky; top: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0; margin-bottom: 6px; background: var(--page); }
+.boards button { padding: 7px 16px; font-size: 14px; }
+.boards button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+.lay-bar { height: 8px; border-radius: 4px; background: var(--chip-bg); position: relative; min-width: 120px; }
+.lay-bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.lmini { display: block; font-size: 11px; color: var(--muted); white-space: normal; line-height: 1.4; margin-top: 2px; }
+#layEntries td:first-child { max-width: 380px; }
 .nav button[aria-selected="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
 .seg { display: inline-flex; gap: 4px; }
 .seg button { padding: 5px 12px; font-size: 13px; }
@@ -162,41 +169,56 @@ ul.tight { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
       <img class="seal" src="/brand/seal-128.png" alt="">
       <img class="mark ink" src="/brand/yuheng-ink.png" alt="玉衡">
       <img class="mark white" src="/brand/yuheng-white.png" alt="玉衡">
-      <span class="brand-sub"><b>策略库 · 日内与日线</b><small>YUHENG v{{VERSION}}</small></span>
+      <span class="brand-sub"><b>策略库 · 入场 / 出场 / 仓位</b><small>YUHENG v{{VERSION}}</small></span>
     </h1>
     <span class="sub" id="updated"></span>
-    <nav class="nav"><a href="/"><button>← 回控制台</button></a></nav>
+    <nav class="nav"><a href="/pre"><button>盘前分析</button></a><a href="/"><button>← 回控制台</button></a></nav>
   </header>
+  <nav class="boards" id="boards" aria-label="策略库分区">
+    <button data-b="plan">今日预案</button>
+    <button data-b="entry">① 入场策略</button>
+    <button data-b="stop">② 止损</button>
+    <button data-b="tgt">③ 止盈</button>
+    <button data-b="pos">④ 仓位管理</button>
+    <button data-b="daily">日线背景</button>
+  </nav>
+  <div class="note board-note" id="boardNote"></div>
 
-  <section class="card">
+  <section class="card" data-board="daily">
     <div class="row">
       <button class="primary" id="libRefresh">重算日线策略库</button>
       <span class="sub" id="genMeta">加载中…</span>
     </div>
     <pre class="log" id="libLog"></pre>
-    <div class="note" style="margin:12px 0 0">这一页只做研究和展示，<b>不会下单</b>。最上面是<b>今日预案</b>和<b>日内策略库</b>（你的打法：1 分钟K、9:36–11:00 开仓、换算成期权）；下半页是<b>日线策略库</b>，只当背景。<br>日线部分的数字是 K 线库里自选股的<b>日线</b>回测：收盘出信号、下一个交易日开盘成交，来回扣 0.06% 成本，空仓现金收益按 0 算。
+    <div class="note" style="margin:12px 0 0">这一页只做研究和展示，<b>不会下单</b>。这个分区是<b>日线策略库</b>，只当背景；你的日内打法看上面的「今日预案」和 ①–④ 分区。<br>日线部分的数字是 K 线库里自选股的<b>日线</b>回测：收盘出信号、下一个交易日开盘成交，来回扣 0.06% 成本，空仓现金收益按 0 算。
       数据从 2016 年 11 月开始，前一年用来热身算指标，所以回测大约从 2017 年底起；样本内 / 样本外以 <span id="splitTxt">2022</span> 年为界。
       策略库是玉衡原来在 SPY / QQQ 上做的，现在换成了你全部的自选股。日线策略和你日内 1 分钟的个人策略 A / B 和广撒网滚仓不是一回事，这里更适合看<b>大方向和行情背景</b>。回测不代表未来。</div>
   </section>
 
-  <section class="card"><h2>今日预案：如果……就……</h2><div id="playbook"><div class="empty">加载中…</div></div></section>
-  <section class="card"><h2>日内策略库：每种开盘，哪组「入场 + 止损 + 止盈」在多少只股票上成立</h2><div id="intraLib"><div class="empty">加载中…</div></div></section>
-  <h2 style="margin:22px 0 10px">日线策略库（背景：拿几天到几周的规则）</h2>
-  <section class="card"><h2>全部自选股：现在各是什么行情</h2><div id="sumRegimes"></div></section>
-  <section class="card"><h2>全部自选股：哪条策略真的比拿着不动强</h2><div id="sumTable"></div></section>
-  <section class="card"><h2>今天收盘触发的信号（下个交易日开盘执行）</h2><div id="sumSignals"></div></section>
+  <section class="card" data-board="plan"><h2>今日预案：如果……就……</h2><div id="playbook"><div class="empty">加载中…</div></div></section>
 
-  <section class="card">
+  <section class="card" data-board="entry"><h2>入场策略：每条入场单独看（止损、止盈全部平均）</h2><div id="layEntries"><div class="empty">加载中…</div></div></section>
+  <section class="card" data-board="entry"><h2>入场 × 出场组合：每种开盘，哪组在多少只股票上成立</h2><div id="intraLib"><div class="empty">加载中…</div></div></section>
+  <section class="card" data-board="stop"><h2>止损：每种止损单独看（入场、止盈全部平均）</h2><div id="layStops"><div class="empty">加载中…</div></div></section>
+  <section class="card" data-board="tgt"><h2>止盈：每种止盈单独看（入场、止损全部平均）</h2><div id="layTargets"><div class="empty">加载中…</div></div></section>
+  <section class="card" data-board="pos"><h2>仓位管理：同样的入场和出场，换不同的「几张、加减、停手」</h2><div id="laySizing"><div class="empty">加载中…</div></div></section>
+
+  <h2 style="margin:22px 0 10px" data-board="daily">日线策略库（背景：拿几天到几周的规则）</h2>
+  <section class="card" data-board="daily"><h2>全部自选股：现在各是什么行情</h2><div id="sumRegimes"></div></section>
+  <section class="card" data-board="daily"><h2>全部自选股：哪条策略真的比拿着不动强</h2><div id="sumTable"></div></section>
+  <section class="card" data-board="daily"><h2>今天收盘触发的信号（下个交易日开盘执行）</h2><div id="sumSignals"></div></section>
+
+  <section class="card" data-board="daily">
     <h2>单只股票</h2>
     <div class="row"><div class="seg symseg" id="symSeg"></div></div>
     <div class="sub" id="libMeta" style="margin-top:8px"></div>
   </section>
-  <section class="card"><h2>当前行情</h2><div id="libNow"></div></section>
-  <section class="card"><h2>按当前行情匹配</h2><div id="libMatch"></div></section>
-  <section class="card"><h2>策略库 · 天梯榜</h2><div id="libFilters"></div><div class="scroll" id="libTable"></div></section>
-  <section class="card"><h2>行情 × 策略：在每种行情里的表现</h2><div id="libHeat"></div></section>
-  <section class="card"><h2>止损实验：同一个入场，换不同的止损</h2><div id="libStops"></div></section>
-  <section class="card"><h2>期权结构：每种行情可以用什么表达</h2><div class="scroll" id="libOpts"></div></section>
+  <section class="card" data-board="daily"><h2>当前行情</h2><div id="libNow"></div></section>
+  <section class="card" data-board="daily"><h2>按当前行情匹配</h2><div id="libMatch"></div></section>
+  <section class="card" data-board="daily"><h2>策略库 · 天梯榜</h2><div id="libFilters"></div><div class="scroll" id="libTable"></div></section>
+  <section class="card" data-board="daily"><h2>行情 × 策略：在每种行情里的表现</h2><div id="libHeat"></div></section>
+  <section class="card" data-board="daily"><h2>日线止损实验：同一个日线入场，换不同的止损</h2><div id="libStops"></div></section>
+  <section class="card" data-board="daily"><h2>期权结构：每种行情可以用什么表达</h2><div class="scroll" id="libOpts"></div></section>
 </main>
 <div class="tip" id="tip"></div>
 
@@ -841,6 +863,7 @@ async function loadIntraday() {
   let I;
   try { I = await (await fetch("/api/intraday")).json(); } catch (e) { host.innerHTML = `<div class="empty">读取失败：${esc(e.message)}</div>`; return; }
   if (I.missing) { host.innerHTML = '<div class="empty">还没生成：控制台工具「日内策略库重算」。</div>'; return; }
+  try { renderLayers(I); } catch (e) { console.error(e); }
   const sn = id => (I.strats.find(s => s.id === id) || {}).name || id, tn = id => (I.stops.find(s => s.id === id) || {}).name || id,
     gn = id => ((I.targets || []).find(s => s.id === id) || {}).name || id, dn = d => d === "S" ? "空" : "多";
   const ctxs = [["all", "全部日子"], ...I.gaps.map(g => ["gap:" + g.id, g.name])];
@@ -862,11 +885,105 @@ async function loadIntraday() {
     <details style="margin-top:6px"><summary>入场说明</summary><ul class="tight">${I.strats.map(s => `<li><b>${esc(s.name)}</b>（${esc(s.dir)}，结构止损：${esc(s.struct)}${s.fib ? "；斐波那契推动段：" + esc(s.fib) : ""}）：${esc(s.entry)}</li>`).join("")}</ul></details>`;
 }
 
+
+// ================================================================ 分区：今日预案 / ① 入场 / ② 止损 / ③ 止盈 / ④ 仓位 / 日线背景
+const BOARD_NOTE = {
+  plan: "今天按开盘类型和方向挑出的「入场 + 止损 + 止盈」，和日线行情给的风险上限。挑法在没看过的数据上不赚钱（见 ④ 仓位管理里的留出检验），只当执行时的默认选项。",
+  entry: "入场 = 什么时候进、做多还是做空。每条入场都分做多（买 CALL）/ 做空（买 PUT），1 分钟K 2019 年起，9:36–11:00 开仓，换算成期权（平值、约 3 天到期），样本外 2024 年起。",
+  stop: "止损 = 错了在哪走。同一个止损，配所有入场和止盈一起平均；和随机入场用同一个止损比。",
+  tgt: "止盈 = 对了在哪走。斐波那契的推动段见入场说明；目标已经在入场价后面就用下一档。",
+  pos: "仓位 = 买几张、什么时候加减、什么时候停手。只用 2019–2023 挑组合、2024 起检验；金额按今天的期权价格水平折算。仓位改变不了赚亏，只改变亏多少、回撤多深。",
+  daily: "日线策略库：拿几天到几周的规则，只当大方向和行情背景，不是你日内的打法。",
+};
+function setBoard(b) {
+  if (!BOARD_NOTE[b]) b = "plan";
+  document.querySelectorAll("[data-board]").forEach(el => el.hidden = el.dataset.board !== b);
+  document.querySelectorAll("#boards button").forEach(x => x.setAttribute("aria-selected", x.dataset.b === b ? "true" : "false"));
+  $("#boardNote").textContent = BOARD_NOTE[b];
+  try { localStorage.setItem("yuheng.libBoard", b); } catch (e) {}
+  if (location.hash !== "#" + b) history.replaceState(null, "", "#" + b);
+  if (b === "daily" && typeof renderLib === "function") { try { if (L && FULL[sym]) renderLib(); } catch (e) {} }
+}
+document.querySelectorAll("#boards button").forEach(x => x.onclick = () => setBoard(x.dataset.b));
+
+const ppct = v => v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(1) + "%";
+function bar(v, lo, hi, color) {   // 0 在中间的小横条
+  if (v == null) return "";
+  const span = Math.max(Math.abs(lo), Math.abs(hi)) || 1, w = Math.min(50, Math.abs(v) / span * 50);
+  return `<div class="lay-bar"><i style="left:${v >= 0 ? 50 : 50 - w}%;width:${w}%;background:${color || (v >= 0 ? "var(--good-mark)" : "var(--critical)")}"></i>
+    <i style="left:50%;width:1px;background:var(--axis)"></i></div>`;
+}
+function renderLayers(I) {
+  const Ly = I.layers;
+  if (!Ly) { ["#layEntries", "#layStops", "#layTargets"].forEach(s => $(s).innerHTML = '<div class="empty">日内策略库还是旧版：控制台工具「日内策略库重算」。</div>'); return; }
+  const sn = id => (I.strats.find(s => s.id === id) || {}).name || id, tn = id => (I.stops.find(s => s.id === id) || {}).name || id,
+    gn = id => ((I.targets || []).find(s => s.id === id) || {}).name || id;
+  const vals = Ly.entries.map(e => e.avg).filter(v => v != null), lo = Math.min(...vals), hi = Math.max(...vals);
+  const rnd = d => (Ly.entries.find(e => e.sid === "rand" && e.dir === d) || {}).avg;
+  const strat = id => I.strats.find(s => s.id === id) || {};
+  $("#layEntries").innerHTML = `<div class="scroll"><table style="min-width:980px">
+    <tr><th>入场</th><th>方向</th><th class="num">每种出场的笔数</th><th class="num">56 种出场平均（每笔权利金）</th><th></th><th class="num">比随机</th><th>两段都最好的出场（样本内 / 外）</th></tr>
+    ${Ly.entries.map(e => `<tr${e.sid === "rand" ? ' style="color:var(--muted)"' : ""}>
+      <td><b>${esc(sn(e.sid))}</b>${e.dir === "L" ? `<div class="lmini">${esc(strat(e.sid).entry || "")}</div>` : ""}</td>
+      <td class="nw">${e.dir === "L" ? "做多 CALL" : "做空 PUT"}</td>
+      <td class="num">${(e.n_per_exit || 0).toLocaleString()}</td><td class="num">${ppct(e.avg)}</td><td>${bar(e.avg, lo, hi)}</td>
+      <td class="num">${e.sid === "rand" ? "—" : ppct(e.avg - (rnd(e.dir) ?? 0))}</td>
+      <td>${e.best ? `${esc(tn(e.best.stop))} + ${esc(gn(e.best.tgt))}<div class="lmini">${ppct(e.best.in)} / ${ppct(e.best.out)}</div>` : "—"}</td></tr>`).join("")}
+  </table></div>
+  <div class="note" style="margin:10px 0 0">如实说：全部股票合起来，没有一条入场在样本内外都赚；「比随机」是同一个方向、同样 56 种出场的平均差，正数说明比随便进好一点，但不够付期权成本。</div>
+  <details style="margin-top:8px"><summary>每条入场的结构止损和斐波那契推动段</summary><ul class="tight">${I.strats.map(s => `<li><b>${esc(s.name)}</b>：结构止损 ${esc(s.struct)}${s.fib ? "；斐波那契推动段：" + esc(s.fib) : ""}</li>`).join("")}</ul></details>`;
+  const sv = Ly.stops.flatMap(s => [s.avg, s.rand]).filter(v => v != null), slo = Math.min(...sv), shi = Math.max(...sv);
+  $("#layStops").innerHTML = `<div class="scroll"><table style="min-width:900px">
+    <tr><th>止损</th><th class="num">策略平均</th><th></th><th class="num">随机入场</th><th class="num">样本内 / 外</th><th class="num">赚钱的比例</th><th>怎么走</th></tr>
+    ${Ly.stops.map(s => `<tr><td><b>${esc(tn(s.id))}</b></td><td class="num">${ppct(s.avg)}</td><td>${bar(s.avg, slo, shi)}</td>
+      <td class="num">${ppct(s.rand)}</td><td class="num">${ppct(s.in)} / ${ppct(s.out)}</td><td class="num">${s.win == null ? "—" : Math.round(s.win * 100) + "%"}</td>
+      <td class="lmini">${esc((I.stops.find(x => x.id === s.id) || {}).how || "")}</td></tr>`).join("")}
+  </table></div>
+  <div class="note" style="margin:10px 0 0">如实说：前 5 根移动止损和 11:00 时间止损平均亏得最少，但随机入场用它们也差不多——它们好是因为拿得短（少扣时间价值），不是因为选得准。</div>`;
+  const tv = Ly.targets.flatMap(t => [t.L.avg, t.S.avg]).filter(v => v != null), tlo = Math.min(...tv), thi = Math.max(...tv);
+  $("#layTargets").innerHTML = `<div class="scroll"><table style="min-width:900px">
+    <tr><th>止盈</th><th class="num">做多平均</th><th></th><th class="num">随机</th><th class="num">做空平均</th><th></th><th class="num">随机</th><th>怎么算</th></tr>
+    ${Ly.targets.map(t => `<tr><td><b>${esc(gn(t.id))}</b></td>
+      <td class="num">${ppct(t.L.avg)}</td><td>${bar(t.L.avg, tlo, thi)}</td><td class="num">${ppct(t.L.rand)}</td>
+      <td class="num">${ppct(t.S.avg)}</td><td>${bar(t.S.avg, tlo, thi)}</td><td class="num">${ppct(t.S.rand)}</td>
+      <td class="lmini">${esc(((I.targets || []).find(x => x.id === t.id) || {}).how || "")}</td></tr>`).join("")}
+  </table></div>
+  <div class="note" style="margin:10px 0 0">如实说：止盈越近越好（斐波那契 1.0 最好，2.618 和拿到收盘最差），因为期权每拿一分钟都在掉时间价值。</div>`;
+}
+
+async function loadSizing() {
+  const host = $("#laySizing");
+  let Z;
+  try { Z = await (await fetch("/api/sizing")).json(); } catch (e) { host.innerHTML = `<div class="empty">读取失败：${esc(e.message)}</div>`; return; }
+  if (Z.missing) { host.innerHTML = '<div class="empty">还没跑：控制台工具「仓位方案回测」（约 2 分钟）。</div>'; return; }
+  const names = Object.fromEntries(Z.schemes), usd = v => v == null ? "—" : (v >= 0 ? "+$" : "−$") + Math.abs(Math.round(v)).toLocaleString();
+  const S = Z.sets.holdout, R = (S || {}).res || {};
+  const row = (sc, half) => R[`${half}|${sc}|None|None`];
+  const DTN = {trend_up: "单边上涨", trend_down: "单边下跌", spike_fade: "冲高回落", dip_rally: "探底回升", range_wide: "宽幅震荡", range_narrow: "窄幅震荡"};
+  const a = row("one", "in"), b = row("one", "out");
+  host.innerHTML = `
+    ${a && b ? `<div class="note">先看这个：只用 2019–2023 挑「入场 + 出场」，同样的组合只做 1 张，2019–2023 每笔 ${usd(a.per_trade)}（${a.pos_months} 个月赚钱）→ ${Z.split.slice(0, 4)} 起没看过的数据每笔 ${usd(b.per_trade)}（${b.pos_months} 个月赚钱）。${b.total < 0 ? "按开盘类型挑组合这套办法在没看过的数据上不赚钱。" : ""}</div>` : ""}
+    <div class="scroll"><table style="min-width:980px">
+      <tr><th>仓位方案</th><th class="num">平均张数</th><th class="num">每笔 · 样本内</th><th class="num">每笔 · 样本外</th><th class="num">样本外最大回撤</th><th class="num">样本外最差一天</th><th class="num">样本外最长连亏天</th><th class="num">赚钱的月（外）</th></tr>
+      ${Z.schemes.map(([sc, nm]) => { const i = row(sc, "in"), o = row(sc, "out"); return `<tr><td><b>${esc(nm)}</b></td>
+        <td class="num">${o ? o.avg_contracts : "—"}</td><td class="num">${i ? usd(i.per_trade) : "—"}</td><td class="num">${o ? usd(o.per_trade) : "—"}</td>
+        <td class="num">${o ? usd(o.max_dd) : "—"}</td><td class="num">${o ? usd(o.worst_day) : "—"}</td><td class="num">${o ? o.lose_days_streak : "—"}</td><td class="num">${o ? o.pos_months : "—"}</td></tr>`; }).join("")}
+    </table></div>
+    ${Z.by_daytype ? `<h3 style="margin-top:16px">每种当天形态里（收盘后才知道，事后看），每种方案每笔赚亏</h3>
+    <div class="scroll"><table style="min-width:980px"><tr><th>形态</th><th class="num">笔数</th>${Z.schemes.map(([, nm]) => `<th class="num">${esc(nm)}</th>`).join("")}</tr>
+      ${Object.entries(Z.by_daytype).map(([k, v]) => `<tr><td><b>${esc(DTN[k] || k)}</b></td><td class="num">${v.n.toLocaleString()}</td>
+        ${Z.schemes.map(([sc]) => `<td class="num">${usd((v.schemes[sc] || {}).per_trade)}</td>`).join("")}</tr>`).join("")}
+    </table></div>` : ""}
+    <div class="note" style="margin:10px 0 0">方案说明：只做 1 张；固定美元风险 = 张数 = 风险额 ÷ 止损一次每张亏多少；金字塔 = 2 张起，+1R、+2R 各加 1 张，加完整体止损挪到上次加仓价；分批出场 = 4 张，到 1R 走一半，剩下跟前 5 根移动止损；广撒网滚仓 = 试仓 1 张，15 分钟不到 +0.5R 砍，+1R 挪保本、回踩 VWAP 守住加 1 张。每天最多 3 笔、单日亏 $600 停。熔断网格和详细数字见 报告/仓位方案回测_*.md。生成于 ${esc((Z.generated || "").replace("T", " "))}。</div>`;
+}
+
 let rt2; addEventListener("resize", () => { clearTimeout(rt2); rt2 = setTimeout(() => { L && FULL[sym] && renderLib(); }, 200); });
 try { sym = localStorage.getItem("yuheng.sym") || sym; } catch (e) {}
 loadLib();
 loadPlaybook();
 loadIntraday();
+loadSizing();
+setBoard((location.hash || "").slice(1) || (() => { try { return localStorage.getItem("yuheng.libBoard"); } catch (e) { return null; } })() || "plan");
 </script>
 </body>
 </html>

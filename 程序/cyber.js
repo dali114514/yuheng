@@ -64,7 +64,7 @@
     hero.innerHTML = `<div class="cy-t">TODAY P&L · ${esc(d.at)} 美东</div>
       <div class="cy-pnl"><span class="ic"></span><div><div class="cy-big">${money(t)}</div>
       <div class="cy-sub">持仓 ${money(d.open_pl)} · 已平 ${money(d.closed_pl)} · ${d.n_trades} 笔${d.streak ? ` · 连亏 ${d.streak}` : ""}${d.limit ? ` · 上限 -$${d.limit}` : ""}</div></div></div>
-      <div class="cy-rules"><span>止损只往有利方向挪</span><span>到止损就走</span><span>连亏 ${d.rules["连亏停手笔数"]} 笔停手</span><span>试仓 ${d.rules["试仓时限_分钟"]} 分钟不走出来就砍</span><span>只做名单内</span></div>
+      <div class="cy-rules">${(d.plan_chips || []).map(x => `<span>${esc(x)}</span>`).join("")}</div>
       ${d.closed && d.closed.length ? `<div class="cy-closed">已平：${d.closed.map(c => `${c.t} ${c.code.replace(/\d{6}([CP])\d+/, "$1")} <span class="${c.pl >= 0 ? "up" : "down"}">${money(c.pl)}</span>`).join(" · ")}</div>` : ""}`;
     // 玉衡 5.0：像素表情换成和玉衡标志同一路的草书字——赚超 $300 大吉，赚 小吉，亏 小凶，亏超 $300 大凶，没盈亏 平
     const luck = t > 300 ? ["大吉", "big good"] : t > 0.5 ? ["小吉", "good"] : t < -300 ? ["大凶", "big bad"] : t < -0.5 ? ["小凶", "bad"] : ["平", "flat"];

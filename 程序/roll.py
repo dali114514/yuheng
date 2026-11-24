@@ -197,7 +197,7 @@ def judge(p, s, now, start, bars_fn, plan_dirs):
         state, lvl, act = "止损", "stop", f"立刻平仓！权利金 {px:.2f} 已到止损 {stop:.2f}"
     elif R <= s["接近止损_R"]:
         state, lvl, act = "接近止损", "warn", f"离止损 {stop:.2f} 只差 {abs(px - stop):.2f}，到了就走，不许挪止损"
-    elif held is not None and held >= s["试仓时限_分钟"] and R < 0.5:
+    elif s.get("试仓规则", True) and held is not None and held >= s["试仓时限_分钟"] and R < 0.5:
         state, lvl, act = "砍", "warn", f"拿了 {held:.0f} 分钟还没走出来（{R:+.1f}R）：砍掉，把子弹留给走出来的"
     elif R >= s["锁利_R"]:
         lock = cost + risk
@@ -214,6 +214,41 @@ def judge(p, s, now, start, bars_fn, plan_dirs):
                 dir=direction, qty=qty, cost=round(cost, 3), now=round(px, 3), stop=round(stop, 3), R=round(R, 2), pl=round(p["pl"], 2),
                 held=None if held is None else round(held), since=_hm(st_ts), state=state, lvl=lvl, act=act, flags=flags,
                 und_px=upx, und_vwap=None if uvw is None else round(uvw, 2), vwap_ok=vs)
+
+
+SCHEME_NAMES = {"one": "只做 1 张", "risk100": "每笔风险 $100", "risk200": "每笔风险 $200", "risk300": "每笔风险 $300",
+                "pyramid": "金字塔加仓", "scale": "分批出场", "roll": "广撒网滚仓"}
+
+
+def plan_chips(plan, day):
+    """作战面板上的纪律：只显示今天（交易日）的纪律设置。美东 16:00 以后交易日换成下一天，上一天的纪律自动清空。"""
+    if not plan:
+        return [f"{day} 还没定纪律（盘前报告建草稿，和 Claude 讨论后锁定）"]
+    lim = plan.get("限制") or {}
+    pos = plan.get("仓位") or {}
+    brk = pos.get("熔断") or {}
+    names = "、".join(f"{w.get('代码')}{w.get('方向', '')}" for w in plan.get("观察名单") or [] if w.get("代码"))
+    out = [("已锁定" if plan.get("状态") == "已锁定" else "草稿（不弹窗）") + f" · {day}"]
+    if names:
+        out.append(("只做 " if lim.get("只做名单内") else "名单 ") + names)
+    if lim.get("最多笔数"):
+        out.append(f"最多 {lim['最多笔数']} 笔")
+    if lim.get("单日最大亏损_美元"):
+        out.append(f"单日亏 ${lim['单日最大亏损_美元']} 停")
+    if lim.get("每笔最多张数"):
+        out.append(f"每笔最多 {lim['每笔最多张数']} 张")
+    if lim.get("最晚开仓"):
+        out.append(f"{lim['最晚开仓']} 后不开新仓")
+    if pos.get("方案"):
+        out.append("仓位：" + SCHEME_NAMES.get(pos["方案"], pos["方案"]))
+    if brk.get("连亏停手"):
+        out.append(f"连亏 {brk['连亏停手']} 笔停手")
+    if brk.get("回吐停手_美元"):
+        out.append(f"赚过 ${brk['回吐停手_美元']} 回吐一半停")
+    n_st = sum(1 for w in plan.get("观察名单") or [] if w.get("策略"))
+    if n_st:
+        out.append(f"{n_st} 只选了策略")
+    return out
 
 
 def plan_dirs(day=None):
@@ -249,7 +284,11 @@ def snapshot(bars_fn=None, max_age=5):
                 streak += 1
             else:
                 break
-        dirs, plan = plan_dirs()
+        import today
+        sday = today.session_day()
+        dirs, plan = plan_dirs(sday)
+        pos_cfg = (plan or {}).get("仓位") or {}
+        s = dict(s, 试仓规则=(pos_cfg.get("方案") == "roll"))
         held = [p for p in pos if abs(p["qty"]) > 0]
         rows = [judge(p, s, now, start, bars_fn, dirs) for p in held]
         order = {"stop": 0, "warn": 1, "good": 2, "info": 3}
@@ -264,7 +303,8 @@ def snapshot(bars_fn=None, max_age=5):
         ml = lim.get("单日最大亏损_美元")
         if ml and res["total"] <= -float(ml):
             al.append(dict(lvl="stop", text=f"今天已亏 ${-res['total']:,.0f}，到单日上限 ${float(ml):,.0f}：停手，不再开新仓"))
-        if streak >= s["连亏停手笔数"]:
+        stop_n = ((pos_cfg.get("熔断") or {}).get("连亏停手")) if plan else None
+        if stop_n and streak >= int(stop_n):
             al.append(dict(lvl="stop", text=f"今天已连亏 {streak} 笔：按纪律停手，下一笔之前先在这里复盘"))
         scouts = [r for r in rows if r["R"] < s["走出来_R"]]
         if len(scouts) > s["同时试仓最多"]:
@@ -275,7 +315,7 @@ def snapshot(bars_fn=None, max_age=5):
         out.update(ok=True, total=round(res["total"], 2), open_pl=round(res["open_pl"], 2), closed_pl=round(res["closed_pl"], 2),
                    n_trades=res["n_trades"], positions=rows, alerts=al, streak=streak, limit=ml,
                    closed=[dict(t=_hm(t), code=c.replace("US.", ""), pl=round(pl, 2)) for t, c, pl in closed[-8:]],
-                   rules=s)
+                   rules=s, plan_chips=plan_chips(plan, sday), plan_locked=(plan or {}).get("状态") == "已锁定")
         _ST.update(t=time.time(), v=out)
         return out
 
