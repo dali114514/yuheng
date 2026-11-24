@@ -109,6 +109,9 @@ def example_settings():
             return ""
         return x
     cfg = clean(cfg)
+    for k in ("Discord机器人", "Grok盘前", "网站分享", "存储", "重大新闻推送"):   # 要密钥的功能：示例里默认关，填好再开
+        if isinstance(cfg.get(k), dict) and "启用" in cfg[k]:
+            cfg[k]["启用"] = False
     cfg["说明"] = "示例设置：复制成 设置.json 再填自己的密钥（这里全部清空了）。" + str(cfg.get("说明") or "")
     return json.dumps(cfg, ensure_ascii=False, indent=2)
 
