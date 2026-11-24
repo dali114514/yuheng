@@ -50,40 +50,64 @@ def names():
 
 # ================================================================ 前一天的日线数据（ATR、昨收、昨高低、波动率）
 
-def prev_row(code, day):
-    """day 之前的日线：atr_prev（ATR14）、pc、ph、pl、iv（20 日已实现波动率 × 1.1），和日内策略库同一算法。"""
-    key = (code, str(day))
-    if key in _ROWS:
-        return _ROWS[key]
-    start = str(pd.Timestamp(day) - pd.Timedelta(days=140))[:10]
-    q = ("SELECT ts, open, high, low, close, volume FROM bars_1m WHERE code=? AND ts >= ? AND ts < ? "
-         "AND substr(ts,12,5) BETWEEN '09:31' AND '16:00'")
-    parts = []
-    for path in (I.DB_LONG, I.DB):
-        if path.exists():
-            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-            try:
-                parts.append(pd.read_sql_query(q, con, params=(code, start, str(day))))
-            finally:
-                con.close()
-    df = pd.concat(parts) if parts else pd.DataFrame()
-    if df.empty:
+def _expected_prev(day):
+    d = pd.Timestamp(day) - pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= pd.Timedelta(days=1)
+    return str(d.date())
+
+
+def _daily_db(code, day):
+    """K 线库的日线表（bars_1d）里 day 之前的日线。"""
+    import history
+    k = history.load(code, "1d", start=str(pd.Timestamp(day) - pd.Timedelta(days=200))[:10], end=f"{day} 00:00:00")
+    return k[k.index.normalize() < pd.Timestamp(day)]
+
+
+def _daily_mm(code, day, mm):
+    """K 线库没更新时：直接问 moomoo 要日线（只读，不写库）。"""
+    ft = mm.ft
+    ret, d, _ = mm.ctx.request_history_kline("US." + code, start=str(pd.Timestamp(day) - pd.Timedelta(days=200))[:10],
+                                             end=_expected_prev(day), ktype=ft.KLType.K_DAY, autype=ft.AuType.QFQ, max_count=400)
+    if ret != ft.RET_OK or d is None or not len(d):
         return None
-    df = df.drop_duplicates("ts", keep="last").sort_values("ts")
-    df.index = pd.to_datetime(df["ts"])
-    df = df.drop(columns="ts").astype(float)
-    g = df.groupby(df.index.date)
-    d = pd.DataFrame({"high": g["high"].max(), "low": g["low"].min(), "close": g["close"].last(), "n": g["close"].size()})
-    d = d[d["n"] >= 300]
-    if len(d) < 20:
+    d = d.copy()
+    d.index = pd.to_datetime(d["time_key"])
+    d = d.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]].astype(float)
+    return d[d.index.normalize() < pd.Timestamp(day)]
+
+
+def prev_row(code, day, mm=None):
+    """day 之前的日线：atr_prev（ATR14）、pc、ph、pl、iv（20 日已实现波动率 × 1.1），算法和日内策略库一样。
+    用 K 线库的日线表；表里缺了前一个交易日、又给了 moomoo 连接时，改用 moomoo 的日线。还是缺就标 stale（昨收、ATR 可能不准）。"""
+    key = (code, str(day))
+    if key in _ROWS and not (_ROWS[key].get("stale") and mm is not None):
+        return _ROWS[key]
+    want = _expected_prev(day)
+    d = None
+    try:
+        d = _daily_db(code, day)
+    except Exception:
+        d = None
+    src = "K线库日线"
+    if (d is None or not len(d) or str(d.index[-1].date()) < want) and mm is not None:
+        try:
+            d2 = _daily_mm(code, day, mm)
+            if d2 is not None and len(d2) and (d is None or not len(d) or d2.index[-1] > d.index[-1]):
+                d, src = d2, "moomoo 日线"
+        except Exception:
+            pass
+    if d is None or len(d) < 21:
         return None
     pc = d["close"].shift(1)
     tr = pd.concat([d["high"] - d["low"], (d["high"] - pc).abs(), (d["low"] - pc).abs()], axis=1).max(axis=1)
     atr = tr.ewm(alpha=1 / 14, adjust=False).mean()
     rv = np.log(d["close"]).diff().rolling(20).std() * math.sqrt(252)
+    last = str(d.index[-1].date())
+    rvl = rv.iloc[-1]
     row = pd.Series({"atr_prev": float(atr.iloc[-1]), "pc": float(d["close"].iloc[-1]), "ph": float(d["high"].iloc[-1]),
-                     "pl": float(d["low"].iloc[-1]), "iv": float(np.clip((rv.iloc[-1] or 0.4) * 1.1, 0.12, 2.0)),
-                     "last_day": str(d.index[-1])})
+                     "pl": float(d["low"].iloc[-1]), "iv": float(np.clip((rvl if rvl == rvl else 0.4) * 1.1, 0.12, 2.0)),
+                     "last_day": last, "stale": last < want, "src": src})
     _ROWS[key] = row
     return row
 
@@ -193,6 +217,8 @@ def evaluate(code, bars, qbars, row, item, day, pos_cfg=None, cap=4, opt=None, p
         out["note"] = "数据不足"
         return out
     o, h, l, c, v = (bars[x].values.astype(float) for x in ("open", "high", "low", "close", "volume"))
+    if row.get("stale"):
+        out["warn"] = f"K 线库里最近的日线是 {row['last_day']}，缺了前一个交易日：昨收、ATR、开盘类型可能不准（先回填 K 线）"
     gap = (o[0] - row["pc"]) / row["atr_prev"]
     gcls = I._gap_class(gap)
     out["gap"] = dict(cls=gcls, name=dict(I.GAPS)[gcls], val=round(float(gap), 2))
@@ -243,7 +269,7 @@ def evaluate(code, bars, qbars, row, item, day, pos_cfg=None, cap=4, opt=None, p
         tr = dict(dir=d, dir_name=DIRW[d], sid=sid, name=sn.get(sid), stop=x["stop"], stop_name=tn.get(x["stop"]), tgt=x["tgt"],
                   tgt_name=gn.get(x["tgt"]), level=x["level"], src=x["src"], t_sig=t_sig, entry=round(px, 2), stop_px=round(sp, 2),
                   tgt_px=round(tp, 2) if tp is not None else None, opt=dict(
-                      src="实时" if leg else "模型估算", expiry=(opt or {}).get("expiry"), strike=(opt or {}).get("strike"),
+                      src=("盘前估算" if leg.get("est") else "实时") if leg else "模型估算", expiry=(opt or {}).get("expiry"), strike=(opt or {}).get("strike"),
                       price=round(use["price"], 2), delta=round(use["delta"], 2), stop=round(o_stop, 2),
                       tgt=round(o_tgt, 2) if o_tgt is not None else None), loss1=loss1, n0=n0, scheme=scheme,
                   scheme_name=SCHEME_NAMES.get(scheme, scheme), events=[], state="入场")
@@ -258,6 +284,10 @@ def evaluate(code, bars, qbars, row, item, day, pos_cfg=None, cap=4, opt=None, p
             entry_txt += (f"合约 {ctr}，{tr['opt']['src']}约 ${use['price']:.2f}（Δ {use['delta']:+.2f}）→ 期权止损约 ${o_stop:.2f}"
                           + (f"、止盈约 ${o_tgt:.2f}" if o_tgt is not None else "") + f"\n{tr['scheme_name']}：进 {n0} 张（止损一次每张约亏 ${loss1:.0f}）")
         tr["events"].append(dict(t=t_sig, kind="入场" if n0 else "不做", text=entry_txt))
+        if n0 == 0:                               # 按仓位方案不做：之后不再跟踪这笔（没进场就没有出场）
+            tr["state"] = "不做"
+            out["trades"].append(tr)
+            continue
         if live_entry:
             out["trades"].append(tr)
             continue

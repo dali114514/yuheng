@@ -95,6 +95,8 @@ def write_status(day, res, note=""):
                 L.append(f"- 选定（{'做多' if dd == 'L' else '做空'}，{c['src']}，{c['level']}）：{c['name']} + {c['stop_name']} + {c['tgt_name']}")
             if r.get("note"):
                 L.append(f"- {r['note']}")
+            if r.get("warn"):
+                L.append(f"- ⚠ {r['warn']}")
             for tr in r.get("trades") or []:
                 L.append(f"- {tr['state']}：{S.describe(tr)}")
             L.append("")
@@ -130,7 +132,7 @@ def scan_once(feed, day, now, sent, popups_on):
         if b is None or not len(b):
             res[code] = dict(note="读不到行情")
             continue
-        row = S.prev_row(code, day)
+        row = S.prev_row(code, day, getattr(feed, "mm", None))
         r = S.evaluate(code, b, qb, row, w, day, pos_cfg, cap, None, pb)
         # 刚出入场信号：读一次实时期权，按真实合约重算价位和张数
         if any(t["state"] == "入场" for t in r["trades"]):

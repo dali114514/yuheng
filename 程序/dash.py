@@ -308,7 +308,7 @@ def detail(code, q):
     opt = options_of(code, px, ttl=120) if live else None          # 点开的这只 2 分钟刷新一次（今日成交量在变）
     flow = flow_of(code) if live else None
     guard = guard_state(day) if live else None
-    strat = strat_eval(code, b, qb, day, plan, items)
+    strat = strat_eval(code, b, qb, day, plan, items, live)
     vd = verdict(code, b, an, qb, plan, items, live, opt, flow, guard, strat)
     an["summary"] = f"{vd['label']}：{vd['reason']}"            # 「合起来」和结论卡说同一句话
     lv = levels(code, day, an["plan_item"], an["refs"], b)
@@ -480,7 +480,7 @@ def _money(x):
 # ================================================================ 一眼看懂的结论
 
 # ================================================================ 选定策略（stratlive.py，和策略提醒程序同一套）
-def strat_eval(code, b, qb, day, plan, items):
+def strat_eval(code, b, qb, day, plan, items, live=False):
     it = items.get(code)
     if not it:
         return None
@@ -488,7 +488,13 @@ def strat_eval(code, b, qb, day, plan, items):
         import stratlive
         dd = dt.date.fromisoformat(str(day))
         lim = (plan or {}).get("限制") or {}
-        return stratlive.evaluate(code, b, qb, stratlive.prev_row(code, dd), it, dd, (plan or {}).get("仓位"),
+        mm = None
+        if live:
+            try:
+                mm = _mm()
+            except Exception:
+                mm = None
+        return stratlive.evaluate(code, b, qb, stratlive.prev_row(code, dd, mm), it, dd, (plan or {}).get("仓位"),
                                   int(lim.get("每笔最多张数") or 4))
     except Exception as e:
         return dict(err=f"{type(e).__name__}: {e}", trades=[], choices={})
