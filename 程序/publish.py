@@ -166,12 +166,13 @@ def build_tree(first):
         t = f.read_text(encoding="utf-8")
         for rx, rep in PRIVATE:
             t = rx.sub(rep, t)
-        dst.write_text(t, encoding="utf-8")
+        dst.write_text(t, encoding="utf-8", newline="\r\n" if f.suffix == ".bat" else None)   # Windows 批处理要 CRLF 换行
         if f.suffix in (".sh", ".command"):
             dst.chmod(0o755)
     (WORK / "设置.example.json").write_text(example_settings(), encoding="utf-8")
     (WORK / "README.md").write_text((HERE / "publish_readme.md").read_text(encoding="utf-8").replace("{{VERSION}}", version()),
                                     encoding="utf-8")
+    (WORK / ".gitattributes").write_text("*.bat text eol=crlf\n", encoding="utf-8")       # git 里也保持 CRLF
     (WORK / ".gitignore").write_text("设置.json\n程序/data/\n程序/.venv/\n__pycache__/\n*.pyc\n"
                                      "网站/\nhost_setup/\n.备份_改动前/\n*.app/\n.DS_Store\n", encoding="utf-8")
 
