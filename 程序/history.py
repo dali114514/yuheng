@@ -91,6 +91,14 @@ def _first_ts(con, freq, code):
     return r[0] if r else None
 
 
+def _last_ts(con, freq, code):
+    r = con.execute(f"SELECT MAX(ts) FROM {TABLES[freq]} WHERE code = ?", (code,)).fetchone()
+    return r[0] if r else None
+
+
+GAP_FILL_MAX = {"1m": 30, "5m": 60, "1d": 3650}   # 平时更新：上次入库以后缺的天数也一起补（程序几天没开时），最多往前这么多天
+
+
 # ---------------------------------------------------------------- 从 moomoo 拉
 def fetch(mm, code, freq, start, end, pause=0.55, ext=True):
     kt = {"1m": mm.ft.KLType.K_1M, "5m": mm.ft.KLType.K_5M, "1d": mm.ft.KLType.K_DAY}[freq]
@@ -169,6 +177,11 @@ def update(cfg, log=print, codes=None, backfill=False, freqs=("1d", "5m", "1m"),
             if True:
                 days = DAILY_DAYS[f]
                 start, end, ext = today - dt.timedelta(days=days), today, True
+                if not backfill:                       # 程序几天没开：从上次入库那天起补，不只补最近几天
+                    last = _last_ts(con, f, code)
+                    if last:
+                        since = max(dt.date.fromisoformat(last[:10]), today - dt.timedelta(days=GAP_FILL_MAX[f]))
+                        start = min(start, since)
                 if backfill:
                     first = _first_ts(con, f, code)
                     span = BACKFILL_1M_BIG if f == "1m" else BACKFILL_DAYS[f]   # 1 分钟K：研究名单全部补一年
