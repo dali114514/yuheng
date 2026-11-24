@@ -38,6 +38,16 @@ main{display:grid;grid-template-columns:290px 1fr;gap:14px;padding:14px 16px;ali
 .spark{grid-column:1/3;height:22px;width:100%}
 .del{position:absolute;right:6px;top:4px;border:0;background:none;color:var(--muted);padding:0 4px;font-size:15px;display:none}
 .row:hover .del{display:block}
+.row.near{background:color-mix(in srgb,var(--warn) 24%,transparent);box-shadow:inset 4px 0 0 var(--warn)}
+.row.near.sel{background:color-mix(in srgb,var(--warn) 30%,transparent)}
+.poss{grid-column:1/3;display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.pos1{display:grid;grid-template-columns:1fr auto;gap:0 6px;font-size:12px;background:var(--chip);border-radius:6px;padding:4px 7px;font-variant-numeric:tabular-nums}
+.pos1 .nm{font-weight:650}
+.pos1 .lv{grid-column:1/3;color:var(--muted);font-size:11px}
+.pos1.near-stop{background:color-mix(in srgb,var(--warn) 35%,var(--chip));color:var(--ink)}
+.pos1.near-tgt{background:color-mix(in srgb,var(--warn) 35%,var(--chip));color:var(--ink)}
+.pos1 .flag{font-weight:700;color:var(--warn)}
+.tog{border:0;background:none;color:var(--muted);padding:0 2px;font-size:12px}
 .add{display:flex;gap:6px;padding:10px 12px}
 .add input{flex:1;min-width:0;text-transform:uppercase}
 .wrapc{padding:10px 12px 4px}
@@ -180,6 +190,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&
 
 async function api(p, opt) { const r = await fetch(p, opt); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }
 
+let COLLAPSE = {}; try { COLLAPSE = JSON.parse(localStorage.getItem("dash.collapse") || "{}"); } catch (e) {}
 async function loadList() {
   try { LIST = await api("/api/list?x=1" + qs()); } catch (e) { $("#note").textContent = "出错：" + e.message; return; }
   const live = LIST.note === "实时";
@@ -195,12 +206,24 @@ async function loadList() {
     if (r.vd) ch.push(`<span class="pill ${r.vd.tone}">${esc(r.vd.label)}</span>`);
     else ch.push(`<span class="chip">VWAP ${r.side > 0 ? "上" : "下"} ${fmt(Math.abs(r.dist || 0))}</span>`);
     if (r.plan) ch.push(`<span class="chip">计划 ${esc(r.plan)}</span>`);
-    return `<div class="row ${r.code === SEL ? "sel" : ""} ${r.code === "QQQ" ? "ref" : ""}" data-c="${r.code}">
-      <span class="code">${r.code}${r.code === "QQQ" ? ' <span class="small">参照</span>' : ""}</span>
+    if (r.held) ch.unshift(`<span class="chip" style="color:var(--ink)">持仓 ${r.pos.length}</span>`);
+    const open = !(COLLAPSE[r.code]);
+    const posHTML = r.pos && r.pos.length ? `<div class="poss">${(open ? r.pos : []).map(p => {
+        const nr = {stop: "快到止损", stop_hit: "已到止损", tgt: "快到止盈", tgt_hit: "已到止盈"}[p.near] || "";
+        const lv = p.stop == null ? "" : `${esc(p.unit)}止损 ${fmt(p.stop)}${p.tgt != null ? ` · 止盈 ${fmt(p.tgt)}` : ""}` +
+          (p.left_stop != null ? ` · 离止损 ${fmt(p.left_stop, 1)}R` : "") + (p.left_tgt != null ? ` · 离止盈 ${fmt(p.left_tgt, 1)}R` : "") +
+          (p.opt_stop != null ? ` · 期权约 $${fmt(p.opt_stop)}${p.opt_tgt != null ? " / $" + fmt(p.opt_tgt) : ""}` : "");
+        return `<div class="pos1 ${p.near ? "near-stop" : ""}" title="${esc(p.src || "")}">
+          <span class="nm">${esc(p.label)} ×${p.qty}${nr ? ` <span class="flag">${nr}</span>` : ""}</span>
+          <span><span class="${(p.pl || 0) >= 0 ? "up" : "down"}">${p.pl == null ? "" : (p.pl >= 0 ? "+$" : "−$") + Math.abs(Math.round(p.pl))}</span> ${p.R != null ? `${p.R >= 0 ? "+" : ""}${fmt(p.R, 1)}R` : ""}</span>
+          <span class="lv">成本 ${fmt(p.cost)} → 现 ${fmt(p.now)}${lv ? " · " + lv : ""}</span></div>`; }).join("")}
+        ${open ? "" : `<span class="small">${r.pos.length} 笔持仓已收起</span>`}</div>` : "";
+    return `<div class="row ${r.code === SEL ? "sel" : ""} ${r.code === "QQQ" ? "ref" : ""} ${r.near ? "near" : ""}" data-c="${r.code}">
+      <span class="code">${r.pos && r.pos.length ? `<button class="tog" data-tog="${r.code}" title="展开 / 收起持仓">${COLLAPSE[r.code] ? "▸" : "▾"}</button>` : ""}${r.code}${r.code === "QQQ" ? ' <span class="small">参照</span>' : ""}${r.held && !r.in_watch ? ' <span class="small">持仓</span>' : ""}</span>
       <span class="px">${fmt(r.last)} <span class="${(r.chg || 0) >= 0 ? "up" : "down"}">${pct(r.chg)}</span></span>
-      <div class="chips">${ch.join("")}</div>${r.vd ? `<div class="rs2">${esc(r.vd.reason)}</div>` : ""}
+      <div class="chips">${ch.join("")}</div>${posHTML}${r.vd ? `<div class="rs2">${esc(r.vd.reason)}</div>` : ""}
       <canvas class="spark" data-s="${r.spark.join(",")}"></canvas>
-      ${r.code !== "QQQ" ? `<button class="del" data-del="${r.code}" title="移出">×</button>` : ""}</div>`;
+      ${r.code !== "QQQ" && !(r.held && !r.in_watch) ? `<button class="del" data-del="${r.code}" title="移出">×</button>` : ""}</div>`;
   }).join("");
   document.querySelectorAll(".spark").forEach(drawSpark);
 }
@@ -439,6 +462,8 @@ $("#simb").onclick = async () => {
 $("#list").addEventListener("click", async ev => {
   const del = ev.target.dataset.del;
   if (del) { ev.stopPropagation(); await saveWatch(LIST.watch.filter(c => c !== del)); return; }
+  const tog = ev.target.dataset.tog;
+  if (tog) { ev.stopPropagation(); COLLAPSE[tog] = !COLLAPSE[tog]; try { localStorage.setItem("dash.collapse", JSON.stringify(COLLAPSE)); } catch (e) {} loadList(); return; }
   const row = ev.target.closest(".row"); if (!row) return;
   SEL = row.dataset.c; try { localStorage.setItem("dash.sel", SEL); } catch (e) {}
   $("#sim").innerHTML = ""; document.querySelectorAll(".row").forEach(r => r.classList.toggle("sel", r.dataset.c === SEL)); loadDetail();

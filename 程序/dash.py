@@ -332,6 +332,79 @@ def detail(code, q):
                 pos_scheme=((plan or {}).get("仓位") or {}).get("方案"), in_plan=code in items)
 
 
+# ================================================================ 持仓（期权盯盘）：买了什么就放最前面，快到止损 / 止盈整块标黄
+NEAR_DEFAULT = 0.3          # 离止损（或止盈）只剩不到 0.3R 就算「快到了」
+
+
+def near_r():
+    try:
+        return float((cfg_all().get("盯盘界面") or {}).get("接近止损止盈_R") or NEAR_DEFAULT)
+    except Exception:
+        return NEAR_DEFAULT
+
+
+def positions_now(live):
+    """moomoo 实时持仓（roll.snapshot：只读）。不在交易时段 / 回放时没有。返回 [持仓 dict]。"""
+    if not live:
+        return []
+    try:
+        import roll
+        s = roll.snapshot(LIVE.bars)
+        return s.get("positions") or [] if s.get("ok") else []
+    except Exception:
+        return []
+
+
+def pos_levels(p, strat, und_px, near):
+    """一笔持仓的止损 / 止盈和「快到了没有」。
+       选了策略且策略那笔还在场（方向一致）：按策略的正股止损价 / 止盈价，用正股现价判断；
+       否则：权利金止损 = 成本 − min(0.5, 成本 × 50%)（基本纪律），止盈 = 成本 + 2 × 止损距离，用期权现价判断。"""
+    d = 1 if p.get("dir") == "多" else -1
+    tr = None
+    for t in (strat or {}).get("trades") or []:
+        if t.get("state") == "持仓中" and t.get("dir") == d:
+            tr = t
+    out = dict(src=None, stop=None, tgt=None, unit="", near=None, left_stop=None, left_tgt=None)
+    if tr and und_px:
+        e, sp, tp = tr["entry"], tr["stop_px"], tr.get("tgt_px")
+        risk = abs(e - sp)
+        ls = (und_px - sp) * d / risk if risk else None                   # 离止损还有几 R
+        lt = ((tp - und_px) * d / abs(tp - e)) if (tp is not None and tp != e) else None
+        out.update(src=f"按选定策略（{tr['name']}，{tr['stop_name']} / {tr['tgt_name']}）", stop=sp, tgt=tp, unit="正股",
+                   left_stop=None if ls is None else round(ls, 2), left_tgt=None if lt is None else round(lt, 2),
+                   opt_stop=(tr.get("opt") or {}).get("stop"), opt_tgt=(tr.get("opt") or {}).get("tgt"))
+        if ls is not None and ls <= near:
+            out["near"] = "stop_hit" if ls <= 0 else "stop"
+        elif lt is not None and lt <= near:
+            out["near"] = "tgt_hit" if lt <= 0 else "tgt"
+        return out
+    cost, now, stop = p.get("cost"), p.get("now"), p.get("stop")
+    if cost is None or now is None or stop is None:
+        return out
+    risk = cost - stop
+    if p.get("kind") == "正股":
+        R = p.get("R") or 0
+        return dict(out, src="正股：按每股 $1 算 1R", stop=stop, tgt=cost + 2 * (cost - stop) if risk else None, unit="正股",
+                    near=("stop_hit" if R <= -1 else "stop") if R <= -(1 - near) else ("tgt_hit" if R >= 2 else "tgt") if R >= 2 - near else None)
+    tgt = cost + 2 * risk if risk > 0 else None
+    R = p.get("R") or 0
+    out.update(src="默认：权利金亏 min(0.5, 50%) 止损，2R 止盈", stop=round(stop, 2), tgt=None if tgt is None else round(tgt, 2), unit="权利金",
+               left_stop=round(R + 1, 2), left_tgt=round(2 - R, 2) if tgt else None)
+    if R <= -(1 - near):
+        out["near"] = "stop_hit" if R <= -1 else "stop"
+    elif tgt and R >= 2 - near:
+        out["near"] = "tgt_hit" if R >= 2 else "tgt"
+    return out
+
+
+def pos_label(p):
+    if p.get("kind") != "期权":
+        return f"{p.get('und')} 正股"
+    ex = str(p.get("expiry") or "")[5:].replace("-", "/")
+    k = p.get("strike")
+    return f"{p.get('und')} {('%g' % k) if k else ''}{'C' if p.get('opt') != 'PUT' else 'P'} {ex}".strip()
+
+
 def overview(q):
     day, cut, note = mode_of(q)
     live = note == "实时"
@@ -340,7 +413,15 @@ def overview(q):
     codes = get_watch(today.session_day())
     qb = get_bars("QQQ", day, cut, live)
     rows = []
-    for code in ["QQQ"] + [x for x in codes if x != "QQQ"]:
+    pos = positions_now(live)
+    held = []                                       # 买了的放最前面（QQQ 仍在第一行当参照）
+    for p in pos:
+        u = str(p.get("und") or "").upper()
+        if u and u not in held:
+            held.append(u)
+    order = ["QQQ"] + [x for x in held if x != "QQQ"] + [x for x in codes if x != "QQQ" and x not in held]
+    near = near_r()
+    for code in order:
         try:
             b = get_bars(code, day, cut, live)
             r = refs(code, day)
@@ -350,6 +431,7 @@ def overview(q):
             h, l, c, v = (b[x].values.astype(float) for x in ("high", "low", "close", "volume"))
             vw = patterns.vwap(h, l, c, v)
             px = float(c[-1])
+            strat = strat_eval(code, b, qb, day, plan, items, live) if items.get(code) else None
             row = dict(code=code, last=px, chg=(px / r["pc"] - 1) * 100 if r.get("pc") else None,
                        side=1 if px > vw[-1] else -1, dist=(px - vw[-1]) / r["atr"] if r.get("atr") else None,
                        spark=[round(float(x), 3) for x in c[-60:]], plan=(items.get(code) or {}).get("方向"))
@@ -361,12 +443,23 @@ def overview(q):
                             c2=dict(phase=st["phase"], dir=st.get("dir"), entry=st.get("entry"), stop=st.get("stop"), target=st.get("target"),
                                     trig_t=st.get("trig_t"), trig_idx=st.get("trig_idx")))
                 vd = verdict(code, b, lite, qb, plan, items, live, options_of(code, px, refresh=False) if live else None,
-                             flow_of(code, fetch=False) if live else None, guard_state(day) if live else None)
+                             flow_of(code, fetch=False) if live else None, guard_state(day) if live else None, strat)
                 row["vd"] = dict(label=vd["label"], tone=vd["tone"], reason=vd["reason"])
+            mine = [p for p in pos if str(p.get("und") or "").upper() == code]
+            if mine:
+                row["pos"] = []
+                for p in mine:
+                    lv = pos_levels(p, strat, px, near)
+                    row["pos"].append(dict(label=pos_label(p), dir=p.get("dir"), qty=p.get("qty"), cost=p.get("cost"), now=p.get("now"),
+                                           pl=p.get("pl"), R=p.get("R"), state=p.get("state"), **lv))
+                row["held"] = True
+                row["near"] = next((k for k in ("stop_hit", "stop", "tgt_hit", "tgt") if any(x["near"] == k for x in row["pos"])), None)
+                row["in_watch"] = code in codes or code == "QQQ"
             rows.append(row)
         except Exception as e:
             rows.append(dict(code=code, err=f"{type(e).__name__}"))
-    return dict(day=day, note=note, t=f"{et_now():%H:%M}", rows=rows, watch=codes, max=MAXN,
+    return dict(day=day, note=note, t=f"{et_now():%H:%M}", rows=rows, watch=codes, max=MAXN, near_r=near,
+                n_pos=len(pos),
                 share=dict(on=share_on(), url=ts_url() if share_on() else None),
                 plan=dict(状态=plan.get("状态"), 偏向=plan.get("偏向"), 一句话=plan.get("一句话")) if plan else None)
 
