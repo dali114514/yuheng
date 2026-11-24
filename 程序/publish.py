@@ -36,7 +36,7 @@ INCLUDE = [
     "程序/*.py", "程序/*.html", "程序/*.css", "程序/*.js", "程序/*.sh", "程序/*.applescript", "程序/requirements.txt",
     "程序/brand/*",
     "玉衡5.0.command", "修复App.command", "玉衡5.0.bat",
-    "VERSION", "CHANGELOG.md", "CONTRIBUTING.md", "CLAUDE.md", "使用说明.txt", "Discord机器人使用说明.md",
+    "VERSION", "CHANGELOG.md", "CONTRIBUTING.md", "CLAUDE.md", "数据结构.md", "使用说明.txt", "Discord机器人使用说明.md",
     "数据/说明.md", "数据/Claude使用说明.md", "数据/基本纪律.md",
     "报告/*回测*.md", "报告/开盘剧本统计_*.md", "报告/形态概率_*.md", "报告/功能测试和重复检查_*.md", "报告/AI泡沫周报_*.md",
 ]
