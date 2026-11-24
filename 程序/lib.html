@@ -914,7 +914,7 @@ function bar(v, lo, hi, color) {   // 0 在中间的小横条
     <i style="left:50%;width:1px;background:var(--axis)"></i></div>`;
 }
 function renderLayers(I) {
-  const Ly = I.layers;
+  const Ly = I.layer_stats;
   if (!Ly) { ["#layEntries", "#layStops", "#layTargets"].forEach(s => $(s).innerHTML = '<div class="empty">日内策略库还是旧版：控制台工具「日内策略库重算」。</div>'); return; }
   const sn = id => (I.strats.find(s => s.id === id) || {}).name || id, tn = id => (I.stops.find(s => s.id === id) || {}).name || id,
     gn = id => ((I.targets || []).find(s => s.id === id) || {}).name || id;

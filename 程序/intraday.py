@@ -704,7 +704,7 @@ def build_index(log=print):
                        for c, y in syms.items()},
            "combos": rows}
     try:
-        idx["layers"] = build_layers(syms)
+        idx["layer_stats"] = build_layers(syms)      # 不能叫 layers：layers = 3 是「三层格式」的标记，预案靠它认格式
     except Exception as e:
         log(f"（分层汇总出错：{type(e).__name__}: {e}）")
     try:
