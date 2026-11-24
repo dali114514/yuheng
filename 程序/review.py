@@ -108,6 +108,11 @@ def run(cfg, log=print, day=None):
                             text=True, encoding="utf-8", errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
         li = [x for x in (ri.stdout or "").splitlines() if x.startswith("日内策略库已更新")]
         parts.append(li[-1] if li and ri.returncode == 0 else f"✗ 日内策略库出错：{(ri.stdout + ri.stderr)[-200:]}")
+        if ri.returncode == 0:                    # 仓位方案回测（在新的日内策略库上，约 2 分钟）
+            rz = subprocess.run([_sys.executable, str(Path(__file__).with_name("sizing.py"))], capture_output=True,
+                                text=True, encoding="utf-8", errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
+            lz = [x for x in (rz.stdout or "").splitlines() if x.startswith("仓位方案回测已更新")]
+            parts.append(lz[-1] if lz and rz.returncode == 0 else f"✗ 仓位方案回测出错：{(rz.stdout + rz.stderr)[-200:]}")
         if r.returncode == 0:
             import playbook                       # 下一个交易日的今日预案（按新的行情重挑）
             pb = playbook.build(log=None)

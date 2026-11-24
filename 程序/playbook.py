@@ -506,6 +506,36 @@ def intraday_md(it, risk):
     return L
 
 
+def sizing_md():
+    """仓位方案（sizing.py 的结果）：留出检验的结论 + 各方案在没看过的数据上的回撤。"""
+    f = ILIB / "sizing.json"
+    if not f.exists():
+        return ["### 仓位方案", "", "（还没跑：程序/sizing.py）", ""]
+    z = json.loads(f.read_text(encoding="utf-8"))
+    H = (z.get("sets") or {}).get("holdout")
+    if not H:
+        return []
+    R = H["res"]
+    names = dict(z["schemes"])
+    usd = lambda v: "—" if v is None else (f"+${v:,.0f}" if v >= 0 else f"−${-v:,.0f}")
+    a, b = R.get("in|one|None|None"), R.get("out|one|None|None")
+    L = ["### 仓位方案（几张、加减、停手）", ""]
+    if a and b:
+        L += [f"> 先看这个：只用 2019–2023 挑「入场 + 出场」、拿 {z['split'][:4]} 起没看过的数据检验，只做 1 张每笔 {usd(a['per_trade'])} → {usd(b['per_trade'])}"
+              f"（赚钱的月 {a['pos_months']} → {b['pos_months']}）。"
+              + ("按开盘类型挑组合这套办法，在没看过的数据上不赚钱，上面的「检验通过」不等于有优势。" if b["total"] < 0 else "没看过的数据上仍然赚钱。"), ""]
+    rows = [(sc, R.get(f"out|{sc}|None|None")) for sc, _ in z["schemes"]]
+    rows = [(sc, m) for sc, m in rows if m]
+    if rows:
+        L += ["没看过的数据上（" + z["split"][:4] + " 起，每天最多 3 笔、单日亏 $600 停）：", "",
+              "| 方案 | 平均张数 | 每笔 | 最差一天 | 最大回撤 |", "|---|---:|---:|---:|---:|"]
+        L += [f"| {names[sc]} | {m['avg_contracts']} | {usd(m['per_trade'])} | {usd(m['worst_day'])} | {usd(m['max_dd'])} |" for sc, m in rows]
+        best = max(rows, key=lambda x: x[1]["max_dd"])
+        L += ["", f"回撤最小的是「{names[best[0]]}」。没有优势的时候，张数越多亏得越多，金字塔和分批出场会放大亏损；"
+              "熔断（连亏 2 笔停、赚到 $200 回吐一半停）只把亏损少了几个百分点。详细：报告/仓位方案回测_*.md。", ""]
+    return L
+
+
 def _p(v, d=1):
     return "—" if v is None else f"{v * 100:+.{d}f}%"
 
@@ -531,6 +561,10 @@ def to_md(res):
         L.append(f"- **如果大盘（{m['code']}）是「{m['regime']}」**（从 {m['since']} 起）→ 每笔最多 **{r.get('每笔最多张数', '—')} 张**、"
                  f"最多 **{r.get('最多笔数', '—')} 笔**、单日亏 **${r.get('单日最大亏损_美元', '—')}** 停手。")
     L += ["", "### 日内：按开盘类型（主线）", ""] + intraday_md(res.get("intraday"), r)
+    try:
+        L += sizing_md()
+    except Exception as e:
+        L += [f"（仓位方案读不到：{e}）", ""]
     L += ["### 日线背景（拿几天到几周的规则，只当方向参考）", ""]
     for s in go:
         L.append(f"- **如果 {s['code']} 还是「{s['regime_name']}」** → {s['action']}，按上面的仓位（{s['reason']}）。{why(s)}。")
