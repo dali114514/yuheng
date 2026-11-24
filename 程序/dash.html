@@ -267,6 +267,10 @@ function stratHTML() {
   if (!DET.in_plan) return `<div class="small">${esc(SEL)} 不在今天纪律设置的观察名单里：不提醒入场出场。要盯它，先在 Claude 里把它加进观察名单。</div>`;
   if (!S) return "";
   if (S.err) return `<div class="err">${esc(S.err)}</div>`;
+  if (S.preopen) return `<div>${esc(S.note)}</div>
+    <div class="small" style="margin-top:6px">今天的预案在每种开盘下会用的组合（★ = 盘前估计的开盘类型）：</div>
+    ${(S.rows || []).map(r => `<div style="margin-top:3px">${r.est ? "★ " : ""}<b>${esc(r.gap_name)}</b> · ${r.dir === "L" ? "做多（CALL）" : "做空（PUT）"}：${esc(r.name)} + ${esc(r.stop_name)} + ${esc(r.tgt_name)} <span class="small">（${esc(r.level)}）</span></div>`).join("") || '<div class="small">预案没给这只挑组合</div>'}
+    <div class="small" style="margin-top:6px">开盘前不能改策略（会被当成按上一个交易日判断）。</div>`;
   const L = [];
   const gap = S.gap ? `今天「${esc(S.gap.name)}」（跳空 ${S.gap.val > 0 ? "+" : ""}${S.gap.val} 倍 ATR）` : "";
   const ch = Object.entries(S.choices || {});

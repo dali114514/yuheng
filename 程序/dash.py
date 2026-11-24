@@ -308,7 +308,8 @@ def detail(code, q):
     opt = options_of(code, px, ttl=120) if live else None          # 点开的这只 2 分钟刷新一次（今日成交量在变）
     flow = flow_of(code) if live else None
     guard = guard_state(day) if live else None
-    strat = strat_eval(code, b, qb, day, plan, items, live)
+    pday = plan_day(q, day)
+    strat = preopen_strat(code, pday, items) if str(pday) != str(day) else strat_eval(code, b, qb, day, plan, items, live)
     vd = verdict(code, b, an, qb, plan, items, live, opt, flow, guard, strat)
     an["summary"] = f"{vd['label']}：{vd['reason']}"            # 「合起来」和结论卡说同一句话
     lv = levels(code, day, an["plan_item"], an["refs"], b)
@@ -328,7 +329,7 @@ def detail(code, q):
     return dict(code=code, day=day, note=note, t=bars[-1][0], bars=bars, vwap=an["vwap"], atr=an["atr"],
                 levels=lv, marks=marks, box=an["box"],
                 lines=an["lines"], events=an["events"], ladder=an["ladder"], summary=an["summary"], verdict=vd, opt=opt, flow=flow, guard=guard, c2=an["c2"], plan_locked=(plan or {}).get("状态"),
-                strat=strat, strat_opts=strat_opts(code, day) if strat is not None else None,
+                strat=strat, strat_opts=strat_opts(code, pday) if strat is not None else None,
                 pos_scheme=((plan or {}).get("仓位") or {}).get("方案"), in_plan=code in items)
 
 
@@ -431,7 +432,8 @@ def overview(q):
             h, l, c, v = (b[x].values.astype(float) for x in ("high", "low", "close", "volume"))
             vw = patterns.vwap(h, l, c, v)
             px = float(c[-1])
-            strat = strat_eval(code, b, qb, day, plan, items, live) if items.get(code) else None
+            pday = plan_day(q, day)
+            strat = (preopen_strat(code, pday, items) if str(pday) != str(day) else strat_eval(code, b, qb, day, plan, items, live)) if items.get(code) else None
             row = dict(code=code, last=px, chg=(px / r["pc"] - 1) * 100 if r.get("pc") else None,
                        side=1 if px > vw[-1] else -1, dist=(px - vw[-1]) / r["atr"] if r.get("atr") else None,
                        spark=[round(float(x), 3) for x in c[-60:]], plan=(items.get(code) or {}).get("方向"))
@@ -573,6 +575,34 @@ def _money(x):
 # ================================================================ 一眼看懂的结论
 
 # ================================================================ 选定策略（stratlive.py，和策略提醒程序同一套）
+def preopen_strat(code, pday, items):
+    """开盘前：K 线还是上一个交易日的，不能拿它判断今天的开盘类型。改成列出今天的预案在每种开盘下会用哪组，并标出盘前估计的开盘类型。"""
+    it = items.get(code)
+    if not it:
+        return None
+    import stratlive
+    sn, tn, gn = stratlive.names()
+    gnames = {"big_down": "大幅低开", "down": "低开", "flat": "平开", "up": "高开", "big_up": "大幅高开"}
+    est, gap = None, None
+    try:
+        pb = json.loads((HERE / "data" / "策略库" / "playbook.json").read_text(encoding="utf-8"))
+        if str(pb.get("day")) == str(pday):
+            s = next((x for x in (pb.get("intraday") or {}).get("stocks") or [] if x["code"] == code), None)
+            if s:
+                est, gap = s.get("gap_now_class"), s.get("gap_now")
+    except Exception:
+        pass
+    rows = []
+    for g in ("big_down", "down", "flat", "up", "big_up"):
+        ch = stratlive.choices(it, g, str(pday))
+        for d, c in ch.items():
+            rows.append(dict(gap=g, gap_name=gnames[g], est=(g == est), dir=("L" if d == 1 else "S"),
+                             name=sn.get(c["sid"]), stop_name=tn.get(c["stop"]), tgt_name=gn.get(c["tgt"]), level=c["level"], src=c["src"]))
+    note = (f"还没开盘（{pday}）。开盘后按 9:30 的真实跳空选组合；盘前估计是「{gnames.get(est, '—')}」"
+            + (f"（{gap:+.2f} 倍 ATR）" if gap is not None else "") + "。")
+    return dict(preopen=True, note=note, rows=rows, choices={}, trades=[])
+
+
 def strat_eval(code, b, qb, day, plan, items, live=False):
     it = items.get(code)
     if not it:
@@ -604,6 +634,8 @@ def strat_opts(code, day):
 
 def strat_verdict(strat, tmin):
     """有选定策略时，结论卡按它说；返回 (label, tone, reason) 或 None（没选策略，走原来的判断）。"""
+    if strat and strat.get("preopen"):
+        return "等开盘", "wait", strat["note"]
     if not strat or not strat.get("choices"):
         return None
     import stratlive
