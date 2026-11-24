@@ -10,10 +10,10 @@
     - 开盘类型：跳空 =（开盘 − 昨收）÷ 前一天的日线 ATR14：平开（|跳空| < 0.25）、高开 / 低开（0.25–0.75）、大幅高开 / 大幅低开（≥ 0.75）
     - 日线行情：昨天收盘时的七种行情（和日线策略库同一套分类）
 
-  策略（入场）：打法 A（C2 回踩 VWAP，直接用 c2.scan）、打法 B（大实体站上 VWAP，条件同 c2.scan_b）、开盘区间突破 5 / 15 / 30 分钟、
+  策略（入场）：个人策略 B（VWAP 回踩，直接用 c2.scan）、个人策略 A（爆发：大实体站上 VWAP，条件同 c2.scan_b）、开盘区间突破 5 / 15 / 30 分钟、
                VWAP 收复、偏离 VWAP 回归、缺口回补、假突破收回、10 点趋势延续。每条都有自己的「结构止损」位置。
   止损 / 出场（同一个入场换 9 种）：权利金固定比例（今天的「每张亏 0.5」换算成百分比）、0.1 / 0.2 倍 ATR（目标 2R）、
-               结构止损 + 2R、结构止损拿到收盘、VWAP 反穿、前 5 根低点移动止损、打法 C 规则、11:00 时间止损。都最晚收盘平。
+               结构止损 + 2R、结构止损拿到收盘、VWAP 反穿、前 5 根低点移动止损、广撒网滚仓规则、11:00 时间止损。都最晚收盘平。
 
   期权换算（估算，没有历史期权报价）：平值、到期 3 天（你成交的中位数），波动率用这只股票前 20 天的已实现波动率 × 1.1；
     每根 K 线按 Black-Scholes 重新算期权价，所以 Delta / Gamma / 时间损耗都是随时变的（不是固定 0.5）；
@@ -50,9 +50,9 @@ MIN_DAYS = 60
 GAPS = [("big_down", "大幅低开"), ("down", "低开"), ("flat", "平开"), ("up", "高开"), ("big_up", "大幅高开")]
 
 STRATS = [
-    dict(id="A", name="打法 A：C2 回踩 VWAP", dir="多空",
+    dict(id="A", name="个人策略 B：VWAP 回踩", dir="多空",
          entry="第 6 根定方向（收在开盘价和 VWAP 同侧），回踩 VWAP / FVG 后出现确认组合，下一根进（c2.scan 原样）。", struct="C2 极值外"),
-    dict(id="B", name="打法 B：大实体站上 VWAP", dir="多",
+    dict(id="B", name="个人策略 A：爆发（大实体站上 VWAP）", dir="多",
          entry="大实体阳线从 VWAP 下方收上来（实体 ≥ 0.1 ATR、≥ 前 20 根平均 2.5 倍、占整根 ≥ 60%），QQQ 在开盘价和 VWAP 上方，上方前高离现价 ≥ 0.1 ATR。",
          struct="信号K低点"),
     dict(id="orb5", name="开盘区间突破（5 分钟）", dir="多空", entry="收盘突破前 5 根的最高 / 最低点。", struct="区间另一边"),
@@ -75,7 +75,7 @@ STOPS = [
     dict(id="struct_close", name="结构止损，拿到收盘", how="只用结构止损，不设目标，收盘平。"),
     dict(id="vwap", name="VWAP 反穿", how="收盘回到 VWAP 另一侧就走（结构止损兜底），否则拿到收盘。"),
     dict(id="trail5", name="前 5 根移动止损", how="结构止损起步，之后跟着前 5 根最低（做空是最高）点只往有利方向挪。"),
-    dict(id="planC", name="打法 C 规则", how="结构止损；15 分钟还不到 +0.5R 就砍；到 +1R 挪保本，到 +2R 挪到 +1R；否则拿到收盘。"),
+    dict(id="planC", name="广撒网滚仓规则", how="结构止损；15 分钟还不到 +0.5R 就砍；到 +1R 挪保本，到 +2R 挪到 +1R；否则拿到收盘。"),
     dict(id="time11", name="11:00 时间止损", how="结构止损；11:00 还在就平。"),
 ]
 
@@ -344,7 +344,7 @@ def simulate(day_df, vw, i, d, struct, atr, iv, prem_x):
         trail = np.maximum.accumulate(np.maximum(roll, struct)) if d == 1 else np.minimum.accumulate(np.minimum(roll, struct))
         s = stop_hit(trail)
         res["trail5"] = (e + s[0], s[1]) if s else (e + len(C) - 1, C[-1])
-        # 打法 C
+        # 广撒网滚仓（原打法 C）
         r_close = (C - px) * d / risk_s
         r_best = np.maximum.accumulate((favor - px) * d / risk_s)
         stops = np.where(r_best >= 2, px + d * risk_s, np.where(r_best >= 1, px, struct))

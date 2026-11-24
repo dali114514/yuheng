@@ -1,4 +1,4 @@
-// 作战面板：今日盈亏（吉凶字，原来是像素图标）+ 纪律警报（大感叹号）+ 打法 C 持仓状态。盯盘界面和控制台共用。只读。
+// 作战面板：今日盈亏（吉凶字，原来是像素图标）+ 纪律警报（大感叹号）+ 广撒网滚仓持仓状态。盯盘界面和控制台共用。只读。
 (function () {
   // 12×12 像素图：. 透明，其余字母对应颜色
   const ICONS = {
@@ -73,7 +73,7 @@
     let h = "";
     if (stops.length) h += `<div class="cy-alarm"><div class="cy-bang">!</div><ul>${stops.map(a => `<li>${esc(a.text)}</li>`).join("")}</ul></div>`;
     if (warns.length) h += `<div class="cy-alarm warn"><div class="cy-bang">!</div><ul>${warns.map(a => `<li>${esc(a.text)}</li>`).join("")}</ul></div>`;
-    h += `<div class="cy-box"><div class="cy-t">POSITIONS · 打法 C 滚仓监测</div>${d.positions.length ? `<div class="cy-pos">${d.positions.map(card).join("")}</div>` : `<div class="cy-none">现在没有持仓。下单前先说：做什么、为什么、在不在名单里。</div>`}</div>`;
+    h += `<div class="cy-box"><div class="cy-t">POSITIONS · 广撒网滚仓监测</div>${d.positions.length ? `<div class="cy-pos">${d.positions.map(card).join("")}</div>` : `<div class="cy-none">现在没有持仓。下单前先说：做什么、为什么、在不在名单里。</div>`}</div>`;
     right.innerHTML = h;
     document.body.classList.toggle("cy-red", stops.length > 0);
     const key = stops.map(a => a.text).join("|");

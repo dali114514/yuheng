@@ -543,7 +543,7 @@ def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
     ph, d = st.get("phase"), st.get("dir")
     dd = 1 if d == "多" else -1 if d == "空" else 0
     clash = pdir in ("多", "空") and d in ("多", "空") and pdir != d
-    # ⑤ 打法 A 入场：确认K收盘后 2 分钟内才算「可以进」；之后报这次信号的结果
+    # ⑤ 个人策略 B（VWAP 回踩）入场：确认K收盘后 2 分钟内才算「可以进」；之后报这次信号的结果
     if ph == "入场" and not clash and st.get("trig_t"):
         th, tm = map(int, st["trig_t"].split(":"))
         ago = tmin - (th * 60 + tm)
@@ -552,17 +552,17 @@ def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
             hit = (res or {}).get("hit")
             done = hit in ("目标", "止损", "开盘价已过止损")
             what = {"目标": f"已经到目标（{(res or {}).get('R', 0):+.1f}R）", "止损": "已经止损（-1R）", "开盘价已过止损": "开盘价已过止损"}.get(hit, "还在进行中")
-            return out("信号已过", "no", f"{st['trig_t']} 出过打法 A 信号（{'做多' if dd > 0 else '做空'}，入场约 {st['entry']:.2f}，"
+            return out("信号已过", "no", f"{st['trig_t']} 出过个人策略 B（VWAP 回踩）信号（{'做多' if dd > 0 else '做空'}，入场约 {st['entry']:.2f}，"
                                          f"止损 {st['stop']:.2f}，目标 {st['target']:.2f}），{what}。" +
-                       ("今天的打法 A 结束了。" if done else "没上车就别追；在车上的按原止损和目标管。"))
+                       ("今天的个人策略 B 结束了。" if done else "没上车就别追；在车上的按原止损和目标管。"))
     if ph == "入场" and not clash:
         stop_usd = abs((st.get("entry") or px) - (st.get("stop") or px))
         g, checks = patterns.grade(dd, pdir if plan else "双向", (px - vw) * dd > 0, dd, q_dir == dd, "VWAP", stop_usd, s, tmin)
         tone = "go" if g in ("A", "B") else "wait"
         return out(f"可以{'做多' if dd > 0 else '做空'} · {g} 级" if g in ("A", "B") else f"信号出现 · {g} 级", tone,
-                   f"打法 A 确认K出现：入场约 {st['entry']:.2f}，止损 {st['stop']:.2f}，目标 {st['target']:.2f}（2R）" +
+                   f"个人策略 B（VWAP 回踩）确认K出现：入场约 {st['entry']:.2f}，止损 {st['stop']:.2f}，目标 {st['target']:.2f}（2R）" +
                    ("" if g in ("A", "B") else "；条件差太多，按纪律不做"), g, checks)
-    # ⑥ 打法 B（只做多）
+    # ⑥ 个人策略 A：爆发（只做多）
     if pdir in ("多", "双向", None) and (pdir is not None or not plan):
         for k in range(3):
             bb = b.iloc[:len(b) - k] if k else b
@@ -570,12 +570,12 @@ def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
             if sig:
                 stop_usd = 1.0
                 g, checks = patterns.grade(1, pdir if plan else "双向", True, dd, q_dir == 1, "VWAP", stop_usd, s, tmin)
-                return out(f"打法 B · 可以做多 · {g} 级" if g in ("A", "B") else f"打法 B 信号 · {g} 级", "go" if g in ("A", "B") else "wait",
+                return out(f"个人策略 A 爆发 · 可以做多 · {g} 级" if g in ("A", "B") else f"个人策略 A 爆发信号 · {g} 级", "go" if g in ("A", "B") else "wait",
                            f"{'刚才' if k else '这一根'}大实体阳线站上 VWAP，目标前高 {sig['target']:.2f}（距离 ${sig['dist']:.2f}）；"
                            "止损按权利金亏 0.5。回测：有希望、没被证实", g, checks)
     if clash and ph in ("C1", "回踩中"):
         return out("不做", "no", f"C1 是{'向上' if dd > 0 else '向下'}，和今天计划方向「{pdir}」相反")
-    # ⑦ 震荡（打法 A 还在进行中才说「等」）
+    # ⑦ 震荡（个人策略 B 还在进行中才说「等」）
     if an.get("box") and ph in ("C1", "回踩中", "等信号"):
         bx = an["box"]
         return out("等 · 震荡中", "wait", f"挤在 {bx[1]:.2f}–{bx[0]:.2f}（高 ${bx[0] - bx[1]:.2f}）：区间里不做，等收盘站出去、下一根不收回")
@@ -586,8 +586,8 @@ def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
                                      f"并收在 VWAP {'上方' if dd > 0 else '下方'}")
     if ph == "等信号":
         return out("等", "wait", "等第 6 根收盘定 C1 方向")
-    why = {"不做": "打法 A 今天不成立（" + ((an.get("c2_reason") or "") or "条件不满足") + "）",
-           "作废": "回调越过 C1 起点，这一波作废", "过时": "等太久没出确认，打法 A 今天放弃"}.get(ph, ph or "")
+    why = {"不做": "个人策略 B 今天不成立（" + ((an.get("c2_reason") or "") or "条件不满足") + "）",
+           "作废": "回调越过 C1 起点，这一波作废", "过时": "等太久没出确认，个人策略 B 今天放弃"}.get(ph, ph or "")
     if an.get("box"):
         why += "；另外现在在震荡区间里"
     return out("不做", "no", why)

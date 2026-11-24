@@ -280,7 +280,7 @@ function ladHTML() {
   const sum = esc(DET.summary || "").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
   return `<table class="lad">${rows}</table>
     <div class="small" style="margin-top:6px">右边是历史上同样的情况之后 15 分钟的走向（9:36–11:00，一年数据）。每一行单独看都在 50% 左右：单看哪一层都猜不出方向。</div>
-    <div class="sum"><span class="small">合起来（按打法 A）</span><br>${sum}</div>`;
+    <div class="sum"><span class="small">合起来（按个人策略 B：VWAP 回踩）</span><br>${sum}</div>`;
 }
 
 function gcls(g) { return g === "A" ? "A" : g === "B" ? "B" : g === "C" ? "C" : g === "震荡中" ? "Z" : "X"; }

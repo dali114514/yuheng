@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-用长期 1 分钟K（2019 起）重新检验打法 A（C2）和打法 B —— 样本外检验
+用长期 1 分钟K（2019 起）重新检验个人策略 B（VWAP 回踩，原打法 A）和个人策略 A（爆发，原打法 B） —— 样本外检验
 
   · 数据：history_long.db（2019-01 → 2025-11-11）+ history.db（2025-11-12 起），只要常规时段
   · 日线 ATR 用 1 分钟K合成的日线算，保证和 1 分钟是同一个复权口径（老数据是前复权价，所以全部用倍日线 ATR，不用美元）
@@ -70,7 +70,7 @@ def vwap(h, l, c, v):
 
 
 def scan_b_day(o, h, l, c, v, t, a, ph, qa, min_dist_atr, s=c2.B_DEFAULT):
-    """打法 B（和 c2.scan_b 同一套条件，只把「前高离现价 ≥ $1.5」换成倍 ATR）：返回第一根信号的位置和目标，或 None。"""
+    """个人策略 A：爆发（和 c2.scan_b 同一套条件，只把「前高离现价 ≥ $1.5」换成倍 ATR）：返回第一根信号的位置和目标，或 None。"""
     vw = vwap(h, l, c, v)
     body = np.abs(c - o)
     rng = h - l
@@ -178,19 +178,19 @@ def line(g):
 
 
 def report(A, B):
-    L = [f"# 长期验证：打法 A（C2）和打法 B（{dt.date.today()}）", "",
+    L = [f"# 长期验证：个人策略 B（VWAP 回踩）和个人策略 A（爆发）（{dt.date.today()}）", "",
          f"数据：{A.code.nunique() if len(A) else 0} 只股票 / ETF，2019-01-02 起的常规时段 1 分钟K。"
          f"**样本外 = {OOS_END} 以前**（这段数据从没参与挑参数）；样本内 = 之后这一年。成本每笔 0.01 倍日线 ATR，已换算成 R 扣掉。", ""]
     for ver in ("不加过滤", "加过滤"):
         g = A[A.ver == ver]
-        L += [f"## 打法 A（C2）· {ver}", "",
+        L += [f"## 个人策略 B：VWAP 回踩（C2）· {ver}", "",
               f"- 样本外：{line(g[g.date < OOS_END])}",
               f"- 样本内：{line(g[g.date >= OOS_END])}", "", "| 年份 | 结果 |", "|---|---|"]
         for y, gy in g.groupby(g.date.str[:4]):
             L.append(f"| {y} | {line(gy)} |")
         o = g[g.date < OOS_END]
         L += ["", f"样本外分方向：多 {line(o[o.dir == '多'])}；空 {line(o[o.dir == '空'])}", ""]
-    L += ["## 打法 B（大实体站上 VWAP 追多，QQQ 同向，目标前高）", "",
+    L += ["## 个人策略 A：爆发（大实体站上 VWAP 追多，QQQ 同向，目标前高）", "",
           "原来的条件「前高离现价 ≥ $1.5」在前复权老数据上没法用，换成倍日线 ATR 的几档一起列出（不挑最好的）；止损 0.1 / 0.2 倍 ATR。", "",
           "| 前高距离 ≥ | 止损 | 样本外 | 样本内 |", "|---|---|---|---|"]
     for (md, st), g in B.groupby(["dist", "stop"]):

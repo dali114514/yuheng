@@ -186,7 +186,7 @@ _PDH = {}
 
 
 def b_codes(day):
-    """打法 B 只做多：纪律设置里方向是「多」或「双向」的股票。"""
+    """个人策略 A（爆发）只做多：纪律设置里方向是「多」或「双向」的股票。"""
     try:
         import today
         p = today.load_plan(day)
@@ -196,7 +196,7 @@ def b_codes(day):
 
 
 def scan_b_all(cfg, feed, codes, now, atr):
-    """打法 B 信号：每只每天只报第一个。"""
+    """个人策略 A（爆发）信号：每只每天只报第一个。"""
     day = now.date()
     if _PDH.get("day") != day:
         import brief
@@ -213,9 +213,9 @@ def scan_b_all(cfg, feed, codes, now, atr):
             continue
         item["b"] = dict(t=f"{now:%H:%M}", **sig)
         record(day, code, dict(phase="B信号", dir="多", entry=sig["entry"], stop=None, target=sig["target"], reasons=sig["reasons"]))
-        log(f"{code} 打法 B 信号：{sig['reasons'][0]}")
+        log(f"{code} 个人策略 A（爆发）信号：{sig['reasons'][0]}")
         if wset(cfg).get("模式") == "提醒":
-            notify("打法 B：大实体站上 VWAP", f"{code} 约 {sig['entry']:.2f}，前高 {sig['target']:.2f}（距离 ${sig['dist']:.2f}）。"
+            notify("个人策略 A：爆发", f"{code} 约 {sig['entry']:.2f}，前高 {sig['target']:.2f}（距离 ${sig['dist']:.2f}）。"
                                          f"QQQ 同向。期权亏 0.5 就走")
 
 
@@ -346,7 +346,7 @@ def scan_once(cfg, feed, codes, now, atr, pcs=None):
     try:
         scan_b_all(cfg, feed, codes, now, atr)
     except Exception:
-        log("打法 B 检查出错：" + traceback.format_exc().splitlines()[-1])
+        log("个人策略 A（爆发）检查出错：" + traceback.format_exc().splitlines()[-1])
     for code in codes:
         b = feed.bars(code, now)
         if b is None:
@@ -358,7 +358,7 @@ def scan_once(cfg, feed, codes, now, atr, pcs=None):
         prev = STATE.get(code, {}).get("phase")
         item = STATE.setdefault(code, {})
         item.update(phase=st["phase"], dir=st.get("dir"), reason=(st.get("reasons") or [""])[0] + (
-                        f"　｜ 打法 B {item['b']['t']}：前高 {item['b']['target']:.2f}" if item.get("b") else ""),
+                        f"　｜ 个人策略 A（爆发） {item['b']['t']}：前高 {item['b']['target']:.2f}" if item.get("b") else ""),
                     entry=st.get("entry"), stop=st.get("stop"), target=st.get("target"), t=f"{now:%H:%M}")
         if code == "QQQ":
             qqq = dict(phase=st["phase"], dir=st.get("dir"), vwap=st.get("vwap"),

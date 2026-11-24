@@ -350,7 +350,21 @@ def build_intraday(st, live=True, log=print):
     idx = json.loads((ILIB / "index.json").read_text(encoding="utf-8"))
     pooled = {(x["sid"], x["stop"]): x["ctx"] for x in idx["combos"]}
     smeta = {s["id"]: s for s in idx["strats"]}
+    try:                                       # 策略名以程序里的为准（改名后不用等策略库重算）
+        import intraday
+        for s_ in intraday.STRATS:
+            if s_["id"] in smeta:
+                smeta[s_["id"]] = dict(smeta[s_["id"]], name=s_["name"])
+    except Exception:
+        pass
     stmeta = {s["id"]: s for s in idx["stops"]}
+    try:
+        import intraday
+        for s_ in intraday.STOPS:
+            if s_["id"] in stmeta:
+                stmeta[s_["id"]] = dict(stmeta[s_["id"]], name=s_["name"])
+    except Exception:
+        pass
     syms = {}
     for c in idx["symbols"]:
         f = ILIB / f"{c}.json"
