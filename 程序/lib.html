@@ -180,7 +180,7 @@ ul.tight { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
   </section>
 
   <section class="card"><h2>今日预案：如果……就……</h2><div id="playbook"><div class="empty">加载中…</div></div></section>
-  <section class="card"><h2>日内策略库：每种开盘，哪组「策略 + 止损」在多少只股票上成立</h2><div id="intraLib"><div class="empty">加载中…</div></div></section>
+  <section class="card"><h2>日内策略库：每种开盘，哪组「入场 + 止损 + 止盈」在多少只股票上成立</h2><div id="intraLib"><div class="empty">加载中…</div></div></section>
   <h2 style="margin:22px 0 10px">日线策略库（背景：拿几天到几周的规则）</h2>
   <section class="card"><h2>全部自选股：现在各是什么行情</h2><div id="sumRegimes"></div></section>
   <section class="card"><h2>全部自选股：哪条策略真的比拿着不动强</h2><div id="sumTable"></div></section>
@@ -822,17 +822,17 @@ function intradayPlaybookHtml(P) {
   return `
     <div class="sub" style="margin:4px 0 8px">主线：1 分钟K、9:36–11:00 开仓、期权（平值、约 3 天到期，按交易时间算时间损耗，扣买卖价差）。
       先看今天是哪种开盘，再走对应分支；不在表里的「股票 × 开盘」= 不做。${!it.live ? "这次没读到实时期权（OpenD 没连上），每张亏损要盘中再算。" : (it.stocks.some(s => s.option && s.option.call && s.option.call.est) ? "期权还没开盘：每张亏损是用盘前股价和期权隐含波动率估算的 Delta 算的，开盘后以实时为准。" : "每张亏损按 moomoo 实时 Delta 算。")}</div>
-    <div class="scroll"><table style="min-width:1000px"><tr><th>如果</th><th>就做</th><th>止损</th><th>级别 / 张数</th><th class="num">样本内 / 外（每笔权利金）</th><th class="num">每张平均（现价折算）</th><th>跨股票（随机）</th><th class="num">止损一次每张约亏</th></tr>
+    <div class="scroll"><table style="min-width:1000px"><tr><th>如果</th><th>方向</th><th>入场</th><th>止损</th><th>止盈</th><th>级别 / 张数</th><th class="num">样本内 / 外（每笔权利金）</th><th class="num">每张平均（现价折算）</th><th>跨股票（随机）</th><th class="num">止损一次每张约亏</th></tr>
       ${rows.map(([s, b]) => `<tr>
         <td class="nw"><b>${esc(s.code)}</b> ${esc(GAPN[b.gap])}${s.gap_now_class === b.gap ? ' <span class="mini">盘前就是</span>' : ""}</td>
-        <td>${esc(b.name)}</td><td class="sub">${esc(b.stop_name)}${b.stop_dist ? `（股价 $${b.stop_dist.toFixed(2)}）` : ""}</td>
+        <td class="nw">${esc(b.dir_name || "")}</td><td>${esc(b.name)}</td><td class="sub">${esc(b.stop_name)}${b.stop_dist ? `（股价 $${b.stop_dist.toFixed(2)}）` : ""}</td><td class="sub">${esc(b.tgt_name || "")}</td>
         <td class="nw">${chip(lvc[b.level] || "", b.level + (b.level === "检验通过" ? (cap ? ` · 最多 ${cap} 张` : "") : " · 1 张"))}</td>
         <td class="num">${b.borrowed ? "借用 · 自己 " + pp(b.all && b.all.avg) : pp(b.in && b.in.avg) + " / " + pp(b.out && b.out.avg)}</td>
         <td class="num">${b.usd_per_contract == null ? "—" : (b.usd_per_contract >= 0 ? "+$" : "−$") + Math.abs(b.usd_per_contract)}</td>
         <td class="nw">${esc(b.pooled)}（${Math.round((b.noise || 0) * 100)}%）</td>
-        <td class="num">${b.loss_call != null || b.loss_put != null ? `涨 $${b.loss_call ?? "—"} / 跌 $${b.loss_put ?? "—"}` : "—"}</td></tr>`).join("")}
+        <td class="num">${b.loss != null ? `$${b.loss}` : "—"}</td></tr>`).join("")}
     </table></div>
-    <div class="sub" style="margin-top:6px">「跨股票」= 这组（策略 + 止损）在这种开盘里，样本内和样本外都赚钱的股票数；括号里是随机入场在同样条件下最多能有多少比例，用来对比噪音。
+    <div class="sub" style="margin-top:6px">「跨股票」= 这组（入场 + 止损 + 止盈 + 方向）在这种开盘里，样本内和样本外都赚钱的股票数；括号里是随机入场在同样条件下最多能有多少比例，用来对比噪音。
       检验通过要比随机高 15 个百分点以上并且 ≥ 30%；试仓级要比随机高 5 个百分点以上。</div>`;
 }
 
@@ -841,7 +841,8 @@ async function loadIntraday() {
   let I;
   try { I = await (await fetch("/api/intraday")).json(); } catch (e) { host.innerHTML = `<div class="empty">读取失败：${esc(e.message)}</div>`; return; }
   if (I.missing) { host.innerHTML = '<div class="empty">还没生成：控制台工具「日内策略库重算」。</div>'; return; }
-  const sn = id => (I.strats.find(s => s.id === id) || {}).name || id, tn = id => (I.stops.find(s => s.id === id) || {}).name || id;
+  const sn = id => (I.strats.find(s => s.id === id) || {}).name || id, tn = id => (I.stops.find(s => s.id === id) || {}).name || id,
+    gn = id => ((I.targets || []).find(s => s.id === id) || {}).name || id, dn = d => d === "S" ? "空" : "多";
   const ctxs = [["all", "全部日子"], ...I.gaps.map(g => ["gap:" + g.id, g.name])];
   const pc = v => v == null ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(1) + "%";
   const cards = ctxs.map(([k, name]) => {
@@ -849,15 +850,16 @@ async function loadIntraday() {
     const randMax = Math.max(0, ...rs.filter(c => c.sid === "rand").map(c => c.ctx[k].pass / c.ctx[k].of));
     const top = rs.filter(c => c.sid !== "rand").sort((a, b) => b.ctx[k].pass / b.ctx[k].of - a.ctx[k].pass / a.ctx[k].of || (b.ctx[k].med_avg ?? -9) - (a.ctx[k].med_avg ?? -9)).slice(0, 5);
     return `<div class="scard"><div class="t">${esc(name)}</div><div class="sub">随机入场最多 ${Math.round(randMax * 100)}% 的股票两段都赚</div>
-      <ol class="tight">${top.map(c => { const x = c.ctx[k]; return `<li>${esc(sn(c.sid))} + ${esc(tn(c.stop))}：${x.pass}/${x.of} 只（中位每笔 ${pc(x.med_avg)}）</li>`; }).join("")}</ol></div>`;
+      <ol class="tight">${top.map(c => { const x = c.ctx[k]; return `<li>${esc(sn(c.sid))}（${dn(c.dir)}）+ ${esc(tn(c.stop))} + ${esc(gn(c.tgt))}：${x.pass}/${x.of} 只（中位每笔 ${pc(x.med_avg)}）</li>`; }).join("")}</ol></div>`;
   }).join("");
   host.innerHTML = `
-    <div class="sub" style="margin-bottom:10px">${Object.keys(I.symbols).length} 只股票的 1 分钟K（2019 起），${I.strats.length - 1} 条日内策略 × ${I.stops.length} 种止损，9:36–11:00 开仓、最晚收盘平，换算成期权（平值、约 ${I.dte} 天到期、每边扣 ${Math.round(I.half_spread * 100)}% 价差）。生成于 ${esc(I.generated.replace("T", " "))}。</div>
+    <div class="sub" style="margin-bottom:10px">${Object.keys(I.symbols).length} 只股票的 1 分钟K（2019 起），${I.strats.length - 1} 条入场（多空分开）× ${I.stops.length} 种止损 × ${(I.targets || []).length} 种止盈，9:36–11:00 开仓、最晚收盘平，换算成期权（平值、约 ${I.dte} 天到期、每边扣 ${Math.round(I.half_spread * 100)}% 价差）。生成于 ${esc(I.generated.replace("T", " "))}。</div>
     <div class="scards">${cards}</div>
-    <div class="note" style="margin:12px 0 0">如实说：大部分「策略 + 止损」组合扣成本后每笔是负的（随机入场每笔约 −2% 到 −8%）。跨股票真正多于随机的，基本只在「大幅低开」那种日子（5 分钟开盘区间突破、VWAP 收复）。
+    <div class="note" style="margin:12px 0 0">如实说：全部股票合起来，没有一组「入场 + 止损 + 止盈」样本内外都赚；每条入场挑最好的出场仍是负的（最好约 −1%，随机入场约 −2%）。斐波那契止盈越近越好（1.0 最好、2.618 最差）。跨股票真正多于随机的，基本只在「大幅低开 / 低开」那种日子。可选组合多了，预案挑出来的要打折看。报告：报告/三层策略库回测_2026-11-24.md。
       期权收益是用模型估的（没有历史期权报价）：时间损耗按交易时间算，偏保守；真实的买卖价差、开盘后隐含波动率下降没有完全算进去。</div>
     <details style="margin-top:10px"><summary>止损方式说明</summary><ul class="tight">${I.stops.map(s => `<li><b>${esc(s.name)}</b>：${esc(s.how)}</li>`).join("")}</ul></details>
-    <details style="margin-top:6px"><summary>策略说明</summary><ul class="tight">${I.strats.map(s => `<li><b>${esc(s.name)}</b>（${esc(s.dir)}，结构止损：${esc(s.struct)}）：${esc(s.entry)}</li>`).join("")}</ul></details>`;
+    <details style="margin-top:6px"><summary>止盈方式说明</summary><ul class="tight">${(I.targets || []).map(s => `<li><b>${esc(s.name)}</b>：${esc(s.how)}</li>`).join("")}</ul></details>
+    <details style="margin-top:6px"><summary>入场说明</summary><ul class="tight">${I.strats.map(s => `<li><b>${esc(s.name)}</b>（${esc(s.dir)}，结构止损：${esc(s.struct)}${s.fib ? "；斐波那契推动段：" + esc(s.fib) : ""}）：${esc(s.entry)}</li>`).join("")}</ul></details>`;
 }
 
 let rt2; addEventListener("resize", () => { clearTimeout(rt2); rt2 = setTimeout(() => { L && FULL[sym] && renderLib(); }, 200); });

@@ -141,7 +141,7 @@ def run_symbol(code, qqq_reg):
         ds = str(day)
         period = "is" if ds < I.SPLIT else "oos"
         panic = 1 if qqq_reg.get(ds) == "panic" else 0
-        sigs = [(sid, i, d) for sid, i, d, _ in I.signals(g, row, qg.get(day), c2s) if sid != "rand"]
+        sigs = [(sid, i, d) for sid, i, d, *_ in I.signals(g, row, qg.get(day), c2s) if sid != "rand"]
         ok = np.flatnonzero((tmin >= I.ENTRY_FROM) & (np.r_[tmin[1:], 10 ** 6] <= I.ENTRY_TO))
         if len(ok):
             rng = np.random.default_rng(zlib.crc32((code + ds).encode()))

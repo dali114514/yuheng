@@ -342,27 +342,29 @@ def per_contract_loss(opt_leg, dist):
     return round((min(move, opt_leg["price"]) + spread) * 100, 0)
 
 
+DIR_NAME = {"L": "做多（买 CALL）", "S": "做空（买 PUT）"}
+
+
 def build_intraday(st, live=True, log=print):
+    """三层策略库（入场 × 止损 × 止盈 × 方向）→ 每只股票、每种开盘、每个方向挑一组。"""
     if not (ILIB / "index.json").exists():
         return None
     need = dict({"样本内最少笔数": 12, "样本外最少笔数": 6, "跨股票最少只数": 8, "跨股票检验通过比例": 0.3, "跨股票试仓比例": 0.15},
                 **(st.get("日内挑策略") or {}))
     idx = json.loads((ILIB / "index.json").read_text(encoding="utf-8"))
-    pooled = {(x["sid"], x["stop"]): x["ctx"] for x in idx["combos"]}
+    if idx.get("layers") != 3:
+        log("（日内策略库还是改三层之前的旧结果：运行 程序/intraday.py 重算）")
+        return None
+    pooled = {(x["sid"], x["stop"], x["tgt"], x["dir"]): x["ctx"] for x in idx["combos"]}
     smeta = {s["id"]: s for s in idx["strats"]}
-    try:                                       # 策略名以程序里的为准（改名后不用等策略库重算）
-        import intraday
-        for s_ in intraday.STRATS:
-            if s_["id"] in smeta:
-                smeta[s_["id"]] = dict(smeta[s_["id"]], name=s_["name"])
-    except Exception:
-        pass
     stmeta = {s["id"]: s for s in idx["stops"]}
-    try:
+    tmeta = {s["id"]: s for s in idx["targets"]}
+    try:                                       # 名字以程序里的为准（改名后不用等策略库重算）
         import intraday
-        for s_ in intraday.STOPS:
-            if s_["id"] in stmeta:
-                stmeta[s_["id"]] = dict(stmeta[s_["id"]], name=s_["name"])
+        for src, dst in ((intraday.STRATS, smeta), (intraday.STOPS, stmeta), (intraday.TARGETS, tmeta)):
+            for s_ in src:
+                if s_["id"] in dst:
+                    dst[s_["id"]] = dict(dst[s_["id"]], name=s_["name"])
     except Exception:
         pass
     syms = {}
@@ -377,22 +379,23 @@ def build_intraday(st, live=True, log=print):
             return None, p
         return p["pass"] / p["of"], p
 
-    # 对照组（随机入场）在每种开盘里的通过率：噪音基准
+    # 对照组（随机入场）在每种开盘、每个方向里的通过率：噪音基准（56 种出场里取最高）
     noise = {}
     for g in GAP_ORDER:
-        v = [rate(("rand", s["id"]), g)[0] for s in idx["stops"]]
-        v = [x for x in v if x is not None]
-        noise[g] = max(v) if v else None
+        for dd in ("L", "S"):
+            v = [rate(k, g)[0] for k in pooled if k[0] == "rand" and k[3] == dd]
+            v = [x for x in v if x is not None]
+            noise[(g, dd)] = max(v) if v else None
 
-    def branch(y, g, borrowed=False):
+    def branch(y, g, dd, borrowed=False):
         best = None
+        nz = noise.get((g, dd)) or 0
         for key, c in y["combos"].items():
-            sid, stp = key.split("|")
-            if sid == "rand":
+            sid, stp, tgt, kd = key.split("|")
+            if sid == "rand" or kd != dd:
                 continue
-            r, p = rate((sid, stp), g)
-            floor = max(need["跨股票试仓比例"], (noise.get(g) or 0) + 0.05)   # 要明显高于随机入场的通过率
-            if r is None or r < floor:
+            r, p = rate((sid, stp, tgt, dd), g)
+            if r is None or r < max(need["跨股票试仓比例"], nz + 0.05):     # 要明显高于随机入场的通过率
                 continue
             cell = c["gap"].get(g)
             if not borrowed and not _cell_ok(cell, need["样本内最少笔数"], need["样本外最少笔数"]):
@@ -401,21 +404,23 @@ def build_intraday(st, live=True, log=print):
                 continue                               # 新股：自己的样本不够分两段，只要求自己这段不亏
             score = (r, min(cell["in"]["avg"], cell["out"]["avg"]) if not borrowed else cell["all"]["avg"])
             if best is None or score > best[0]:
-                best = (score, sid, stp, cell, p, c)
+                best = (score, sid, stp, tgt, cell, p, c)
         if best is None:
-            return {"gap": g, "level": "无"}
-        (r, _), sid, stp, cell, p, c = best
-        lvl = "试仓级" if borrowed else ("检验通过" if r >= max(need["跨股票检验通过比例"], (noise.get(g) or 0) + 0.15) else "试仓级")
-        return {"gap": g, "level": lvl, "sid": sid, "stop": stp, "name": smeta[sid]["name"], "stop_name": stmeta[stp]["name"],
-                "stop_how": stmeta[stp]["how"], "entry": smeta[sid]["entry"], "dir_rule": smeta[sid]["dir"], "struct": smeta[sid]["struct"],
+            return {"gap": g, "dir": dd, "level": "无"}
+        (r, _), sid, stp, tgt, cell, p, c = best
+        lvl = "试仓级" if borrowed else ("检验通过" if r >= max(need["跨股票检验通过比例"], nz + 0.15) else "试仓级")
+        return {"gap": g, "dir": dd, "dir_name": DIR_NAME[dd], "level": lvl, "sid": sid, "stop": stp, "tgt": tgt,
+                "name": smeta[sid]["name"], "stop_name": stmeta[stp]["name"], "stop_how": stmeta[stp]["how"],
+                "tgt_name": tmeta[tgt]["name"], "tgt_how": tmeta[tgt]["how"], "entry": smeta[sid]["entry"],
+                "struct": smeta[sid]["struct"], "fib": smeta[sid].get("fib"),
                 "in": cell.get("in"), "out": cell.get("out"), "all": cell.get("all"), "pooled": f"{p['pass']}/{p['of']}",
-                "pooled_rate": round(r, 3), "noise": noise.get(g), "delta_model": c.get("delta"), "struct_atr": c.get("struct_atr"),
-                "bars": c.get("bars"), "borrowed": borrowed}
+                "pooled_rate": round(r, 3), "noise": noise.get((g, dd)), "delta_model": c.get("delta"), "struct_atr": c.get("struct_atr"),
+                "bars": c.get("bars"), "tgt_none": c.get("tgt_none"), "borrowed": borrowed}
 
     stocks = []
     for code, y in sorted(syms.items()):
         borrowed = not y.get("has_in")
-        br = [branch(y, g, borrowed) for g in GAP_ORDER]
+        br = [branch(y, g, dd, borrowed) for g in GAP_ORDER for dd in ("L", "S")]
         stocks.append({"code": code, "atr": y["atr_now"], "close": y["close_now"], "premium_model": y["premium_now"],
                        "first": y["first"], "days": y["days"], "borrowed": borrowed, "branches": br})
 
@@ -451,28 +456,25 @@ def build_intraday(st, live=True, log=print):
                 dist = b["struct_atr"] * s["atr"]
             b["stop_dist"] = round(dist, 2) if dist else None
             o = s["option"]
-            legs = [o.get("call"), o.get("put")] if o else []
-            if o and dist:
-                b["loss_call"] = per_contract_loss(o.get("call"), dist)
-                b["loss_put"] = per_contract_loss(o.get("put"), dist)
-            if o and b["stop"] == "prem":
-                prem = [x["price"] for x in legs if x]
-                b["loss_call"] = b["loss_put"] = round(0.5 * 100, 0) if prem else None
+            leg = (o.get("call") if b["dir"] == "L" else o.get("put")) if o else None
+            b["loss"] = per_contract_loss(leg, dist) if (leg and dist) else (round(0.5 * 100, 0) if (leg and b["stop"] == "prem") else None)
             if b.get("all"):
-                p = (o["call"]["price"] if o and o.get("call") else s["premium_model"])
+                p = leg["price"] if leg else s["premium_model"]
                 b["usd_per_contract"] = round(b["all"]["avg"] * p * 100, 0)
-    return {"generated": idx["generated"], "split": idx["split"], "need": need, "noise": noise, "stocks": stocks,
+    return {"generated": idx["generated"], "split": idx["split"], "need": need,
+            "noise": {f"{g}|{dd}": v for (g, dd), v in noise.items()}, "stocks": stocks,
             "live": bool(opts), "gaps_live": bool(gaps)}
 
 
 def intraday_md(it, risk):
     if not it:
-        return ["（日内策略库还没生成：运行 程序/intraday.py）", ""]
+        return ["（日内策略库还没生成或还是旧格式：运行 程序/intraday.py）", ""]
     L = []
     n_ok = sum(1 for s in it["stocks"] for b in s["branches"] if b["level"] == "检验通过")
     n_tr = sum(1 for s in it["stocks"] for b in s["branches"] if b["level"] == "试仓级")
-    L += [f"日内策略库（1 分钟K，2019 起；样本外从 {it['split']} 起）。9:36–11:00 开仓，最晚收盘平。"
-          f"按开盘类型分支：{len(it['stocks'])} 只股票 × 5 种开盘里，检验通过 {n_ok} 个、试仓级 {n_tr} 个，其余不做。", ""]
+    L += [f"日内策略库（1 分钟K，2019 起；样本外从 {it['split']} 起）。9:36–11:00 开仓，最晚收盘平。三层：入场 × 止损 × 止盈，多空分开挑。"
+          f"{len(it['stocks'])} 只股票 × 5 种开盘 × 2 个方向里，检验通过 {n_ok} 个、试仓级 {n_tr} 个，其余不做。"
+          "仓位方案（几张、加减、熔断）另外定。", ""]
     cap = (risk or {}).get("每笔最多张数")
     for s in it["stocks"]:
         act = [b for b in s["branches"] if b["level"] != "无"]
@@ -488,21 +490,18 @@ def intraday_md(it, risk):
             live = (f"；{tag} {opt['expiry']} 到期 {opt['strike']:g} 平值：看涨 ${opt['call']['price']:.2f}（Δ {opt['call']['delta']:+.2f}），"
                     f"看跌 ${opt['put']['price']:.2f}（Δ {opt['put']['delta']:+.2f}）")
         L.append(f"- **{s['code']}**{now}{' · 新股，借用其他股票的检验' if s['borrowed'] else ''}{live}")
-        for b in s["branches"]:
-            if b["level"] == "无":
-                continue
-            mark = "→ 当前分支" if s["gap_now_class"] == b["gap"] else ""
+        for b in act:
+            mark = " → 当前分支" if s["gap_now_class"] == b["gap"] else ""
             size = f"按大盘行情最多 {cap} 张" if b["level"] == "检验通过" and cap else "最多 1 张"
-            loss = ""
-            if b.get("loss_call") is not None or b.get("loss_put") is not None:
-                loss = f"；按实时 Delta，止损一次每张约亏 看涨 ${b.get('loss_call') or '—'} / 看跌 ${b.get('loss_put') or '—'}"
-            stop = (f"止损：{b['stop_name']}" + (f"（股价约 ${b['stop_dist']:.2f}）" if b.get("stop_dist") else ""))
-            usd = f"，按现价期权折算每张平均 {'+' if (b.get('usd_per_contract') or 0) >= 0 else '−'}${abs(b.get('usd_per_contract') or 0):.0f}" if b.get("usd_per_contract") is not None else ""
+            loss = f"；按实时 Delta，止损一次每张约亏 ${b['loss']:.0f}" if b.get("loss") is not None else ""
+            stop = f"止损：{b['stop_name']}" + (f"（股价约 ${b['stop_dist']:.2f}）" if b.get("stop_dist") else "")
+            usd = (f"，按现价期权折算每张平均 {'+' if (b.get('usd_per_contract') or 0) >= 0 else '−'}${abs(b.get('usd_per_contract') or 0):.0f}"
+                   if b.get("usd_per_contract") is not None else "")
             stat = (f"样本内 {b['in']['n']} 笔平均 {_p(b['in']['avg'])}、样本外 {b['out']['n']} 笔平均 {_p(b['out']['avg'])}（权利金收益率）"
                     if not b["borrowed"] else f"自己 {b['all']['n']} 笔平均 {_p(b['all']['avg'])}")
-            L.append(f"  - 如果「{GAP_NAMES[b['gap']]}」{mark} → **{b['name']}**，{stop}，{size}（{b['level']}）。"
+            L.append(f"  - 如果「{GAP_NAMES[b['gap']]}」{mark} → {b['dir_name']} **{b['name']}**，{stop}，止盈：{b['tgt_name']}，{size}（{b['level']}）。"
                      f"{stat}{usd}；跨股票 {b['pooled']} 只成立（随机入场最多 {round((b['noise'] or 0) * 100)}%）{loss}。")
-        L.append("  - 其他开盘 → 不做。")
+        L.append("  - 其他开盘 / 方向 → 不做。")
     L.append("")
     return L
 
