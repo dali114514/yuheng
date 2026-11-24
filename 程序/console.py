@@ -110,7 +110,7 @@ class Supervisor:
     """守护常驻程序：没在跑就启动，挂了就重启。"""
 
     def __init__(self):
-        self.fails = {"bot.py": [], "c2watch.py": [], "guard.py": [], "hot.py": [], "dash.py": []}
+        self.fails = {"bot.py": [], "c2watch.py": [], "guard.py": [], "hot.py": [], "dash.py": [], "stratwatch.py": []}
         self.given_up = {}
         self.started = {}
         self.stop = threading.Event()
@@ -119,6 +119,9 @@ class Supervisor:
     def bot_wanted(self):
         b = load_cfg().get("Discord机器人") or {}
         return bool(b.get("启用")) and bool(str(b.get("机器人令牌") or "").strip())
+
+    def strat_wanted(self):
+        return ((load_cfg().get("策略提醒") or {}).get("模式", "提醒")) != "关"
 
     def c2_wanted(self):
         return ((load_cfg().get("盘中C2") or {}).get("模式", "影子")) != "关"
@@ -160,6 +163,11 @@ class Supervisor:
         elif find_procs("c2watch.py"):
             kill_all("c2watch.py")
             self.started.pop("c2watch.py", None)
+        if self.strat_wanted():                          # 策略提醒：按选定策略弹入场 / 出场
+            self.ensure("stratwatch.py", "策略提醒_窗口输出.txt")
+        elif find_procs("stratwatch.py"):
+            kill_all("stratwatch.py")
+            self.started.pop("stratwatch.py", None)
 
     def run(self):
         while not self.stop.is_set():
@@ -286,6 +294,19 @@ def status():
         cs = c2_status()
         out.append(dict(key="c2", name="早盘 C2 监测", ok=bool(cw), text=(f"{c2m}模式：" + (cs.get("note") or cs.get("brief") or "运行中"))
                         if cw else "没有运行，正在启动……"))
+    sm = (cfg.get("策略提醒") or {}).get("模式", "提醒")
+    if sm == "关":
+        out.append(dict(key="strat", name="策略提醒", ok=False, warn=True, off=True, text="已关闭（设置.json → 策略提醒 → 模式）"))
+    elif SUP.given_up.get("stratwatch.py"):
+        out.append(dict(key="strat", name="策略提醒", ok=False, text=SUP.given_up["stratwatch.py"]))
+    else:
+        sp = find_procs("stratwatch.py")
+        try:
+            ss_ = json.loads((HERE / "data" / ".strat_status.json").read_text(encoding="utf-8"))
+        except Exception:
+            ss_ = {}
+        out.append(dict(key="strat", name="策略提醒", ok=bool(sp), text=(f"{sm}模式：" + (ss_.get("note") or f"盯 {len(ss_.get('stocks') or {})} 只"))[:120]
+                        if sp else "没有运行，正在启动……"))
     if SUP.given_up.get("hot.py"):
         out.append(dict(key="hot", name="热数据", ok=False, text=SUP.given_up["hot.py"]))
     else:
@@ -637,7 +658,7 @@ def quit_all():
     except Exception:
         pass
     SUP.stop.set()
-    for s in ("bot.py", "trainer.py", "dash.py", "c2watch.py", "guard.py", "hot.py"):
+    for s in ("bot.py", "trainer.py", "dash.py", "c2watch.py", "guard.py", "hot.py", "stratwatch.py"):
         kill_all(s)
     threading.Timer(0.5, lambda: os._exit(0)).start()
 

@@ -134,6 +134,7 @@ img.sim{width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px
   </section>
   <section>
     <div id="vd" class="vd"><div class="small">载入中…</div></div>
+    <div id="strat" class="card sec" style="margin-bottom:14px"></div>
     <div class="card">
       <div class="wrapc">
         <div class="title"><span class="small" id="tinfo"></span>
@@ -224,6 +225,9 @@ async function loadDetail() {
     <div class="lbl">${esc(v.label)}</div><div class="rs">${esc(v.reason)}</div>
     <div class="ch2">${v.chips.map(c => `<span class="${c.tone || ""}"><b>${esc(c.k)}</b>${esc(c.v)}</span>`).join("")}</div>`;
   $("#tinfo").textContent = `${DET.day} · 到 ${DET.t} · 日线 ATR ${fmt(DET.atr)}`;
+  if (!(window._stratOpen && document.activeElement && document.activeElement.closest && document.activeElement.closest("#stratEd"))) {
+    const sh = stratHTML(); $("#strat").style.display = sh ? "" : "none"; $("#strat").innerHTML = sh ? `<h3>选定策略 · 入场和出场提醒</h3>${sh}` : ""; bindStrat();
+  }
   $("#why").innerHTML = whyHTML(); $("#fo").innerHTML = foHTML();
   drawChart();
   $("#lines").innerHTML = DET.lines.map(x => `<div>${esc(x)}</div>`).join("");
@@ -231,6 +235,50 @@ async function loadDetail() {
   const evs = [...DET.events.filter(e => e.grade !== "纪律不允许"), ...DET.events.filter(e => e.grade === "纪律不允许")];
   $("#evs").innerHTML = evs.length ? evs.slice(0, 10).map(evHTML).join("") :
     `<div class="empty">最近 15 分钟没有识别到形态。${DET.box ? "价格在震荡区间里：等收盘站出去。" : ""}</div>`;
+}
+
+
+// ================================================================ 选定策略（入场 + 止损 + 止盈 + 仓位方案）
+function stratHTML() {
+  const S = DET.strat, O = DET.strat_opts;
+  if (!DET.in_plan) return `<div class="small">${esc(SEL)} 不在今天纪律设置的观察名单里：不提醒入场出场。要盯它，先在 Claude 里把它加进观察名单。</div>`;
+  if (!S) return "";
+  if (S.err) return `<div class="err">${esc(S.err)}</div>`;
+  const L = [];
+  const gap = S.gap ? `今天「${esc(S.gap.name)}」（跳空 ${S.gap.val > 0 ? "+" : ""}${S.gap.val} 倍 ATR）` : "";
+  const ch = Object.entries(S.choices || {});
+  L.push(`<div class="small">${gap}${DET.pos_scheme ? " · 仓位方案：" + esc((O && O.schemes[DET.pos_scheme]) || DET.pos_scheme) : ""}</div>`);
+  if (!ch.length) L.push(`<div style="margin-top:6px">${esc(S.note || "没选策略")}</div>`);
+  for (const [d, c] of ch) L.push(`<div style="margin-top:6px"><b>${d === "L" ? "做多（CALL）" : "做空（PUT）"}</b>：${esc(c.name)} + ${esc(c.stop_name)} + ${esc(c.tgt_name)}
+    <span class="small">（${esc(c.src)} · ${esc(c.level)}）</span></div>`);
+  for (const tr of S.trades || []) {
+    L.push(`<div style="margin-top:8px"><b>${esc(tr.state)}</b> · ${esc(tr.dir_name)} · ${tr.t_sig} 信号 · 入场 ${fmt(tr.entry)} · 止损 ${fmt(tr.stop_px)} · 止盈 ${tr.tgt_px == null ? "不设" : fmt(tr.tgt_px)}
+      · 期权（${esc(tr.opt.src)}）$${fmt(tr.opt.price)} → 止损 $${fmt(tr.opt.stop)}${tr.opt.tgt == null ? "" : " / 止盈 $" + fmt(tr.opt.tgt)} · ${esc(tr.scheme_name)} ${tr.n0} 张</div>`);
+    L.push(tr.events.map(e => `<div class="small" style="padding-left:10px">${e.t} [${esc(e.kind)}] ${esc(e.text.split("\n").join("；"))}</div>`).join(""));
+  }
+  if (O && DET.can_edit && !replay.d) {                      // 只改今天的（回放别的日子不能改）
+    const cur = (ch[0] || [null, {}])[1];
+    const sel = (id, obj, v) => `<select id="${id}">${Object.entries(obj).map(([k, n]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
+    const pbs = (O.playbook || []).map(b => `${GAPW[b.gap] || b.gap}·${b.dir === "L" ? "多" : "空"}：${b.name} + ${b.stop} + ${b.tgt}（${b.level}）`);
+    L.push(`<details style="margin-top:10px"${window._stratOpen ? " open" : ""} id="stratEd"><summary>改策略（写进今天的纪律设置${DET.plan_locked === "已锁定" ? "；已锁定，要写理由" : ""}）</summary>
+      <div class="small" style="margin:6px 0">预案给这只挑的：${pbs.length ? pbs.map(esc).join("；") : "没有（预案说不做；要做先想清楚理由）"}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">入场 ${sel("se", O.entries, cur.sid)} 止损 ${sel("ss", O.stops, cur.stop)} 止盈 ${sel("st", O.targets, cur.tgt)}
+        仓位 ${sel("sp", O.schemes, DET.pos_scheme || "risk100")}</div>
+      <div style="display:flex;gap:6px;margin-top:6px"><input id="sw" placeholder="理由（锁定后必填）" style="flex:1"><button id="sSave">保存</button><button id="sPb">改回按预案</button></div>
+      <div class="small" id="sMsg"></div></details>`);
+  }
+  return L.join("");
+}
+const GAPW = {big_down: "大幅低开", down: "低开", flat: "平开", up: "高开", big_up: "大幅高开"};
+async function saveStrat(body) {
+  try { await api("/api/strategy", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); window._stratOpen = false; loadDetail(); }
+  catch (e) { const m = $("#sMsg"); if (m) m.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+function bindStrat() {
+  const ed = $("#stratEd"); if (!ed) return;
+  ed.ontoggle = () => { window._stratOpen = ed.open; };
+  $("#sSave").onclick = () => saveStrat({代码: SEL, 入场: $("#se").value, 止损: $("#ss").value, 止盈: $("#st").value, 仓位方案: $("#sp").value, 理由: $("#sw").value});
+  $("#sPb").onclick = () => saveStrat({代码: SEL, 用预案: true, 理由: $("#sw").value});
 }
 
 function whyHTML() {

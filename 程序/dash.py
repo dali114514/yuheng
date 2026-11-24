@@ -308,7 +308,8 @@ def detail(code, q):
     opt = options_of(code, px, ttl=120) if live else None          # 点开的这只 2 分钟刷新一次（今日成交量在变）
     flow = flow_of(code) if live else None
     guard = guard_state(day) if live else None
-    vd = verdict(code, b, an, qb, plan, items, live, opt, flow, guard)
+    strat = strat_eval(code, b, qb, day, plan, items)
+    vd = verdict(code, b, an, qb, plan, items, live, opt, flow, guard, strat)
     an["summary"] = f"{vd['label']}：{vd['reason']}"            # 「合起来」和结论卡说同一句话
     lv = levels(code, day, an["plan_item"], an["refs"], b)
     if opt:
@@ -326,7 +327,9 @@ def detail(code, q):
         marks.append(dict(i=int(j), name=nm, dir=d, box=[float(bh), float(bl), int(j - 1 - L), int(j - 1)]))
     return dict(code=code, day=day, note=note, t=bars[-1][0], bars=bars, vwap=an["vwap"], atr=an["atr"],
                 levels=lv, marks=marks, box=an["box"],
-                lines=an["lines"], events=an["events"], ladder=an["ladder"], summary=an["summary"], verdict=vd, opt=opt, flow=flow, guard=guard, c2=an["c2"], plan_locked=(plan or {}).get("状态"))
+                lines=an["lines"], events=an["events"], ladder=an["ladder"], summary=an["summary"], verdict=vd, opt=opt, flow=flow, guard=guard, c2=an["c2"], plan_locked=(plan or {}).get("状态"),
+                strat=strat, strat_opts=strat_opts(code, day) if strat is not None else None,
+                pos_scheme=((plan or {}).get("仓位") or {}).get("方案"), in_plan=code in items)
 
 
 def overview(q):
@@ -475,7 +478,111 @@ def _money(x):
 
 
 # ================================================================ 一眼看懂的结论
-def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
+
+# ================================================================ 选定策略（stratlive.py，和策略提醒程序同一套）
+def strat_eval(code, b, qb, day, plan, items):
+    it = items.get(code)
+    if not it:
+        return None
+    try:
+        import stratlive
+        dd = dt.date.fromisoformat(str(day))
+        lim = (plan or {}).get("限制") or {}
+        return stratlive.evaluate(code, b, qb, stratlive.prev_row(code, dd), it, dd, (plan or {}).get("仓位"),
+                                  int(lim.get("每笔最多张数") or 4))
+    except Exception as e:
+        return dict(err=f"{type(e).__name__}: {e}", trades=[], choices={})
+
+
+def strat_opts(code, day):
+    import stratlive
+    sn, tn, gn = stratlive.names()
+    pb = stratlive.playbook_branches(day)
+    br = [dict(gap=g, dir=d, name=b["name"], stop=b["stop_name"], tgt=b["tgt_name"], level=b["level"], sid=b["sid"], stop_id=b["stop"], tgt_id=b["tgt"])
+          for (c, g, d), b in pb.items() if c == code]
+    return dict(entries=sn, stops=tn, targets=gn, schemes=stratlive.SCHEME_NAMES, playbook=br)
+
+
+def strat_verdict(strat, tmin):
+    """有选定策略时，结论卡按它说；返回 (label, tone, reason) 或 None（没选策略，走原来的判断）。"""
+    if not strat or not strat.get("choices"):
+        return None
+    import stratlive
+    cands = []
+    for tr in strat.get("trades") or []:
+        for ev in tr["events"]:
+            h, m = map(int, ev["t"].split(":"))
+            cands.append((h * 60 + m, ev, tr))
+    cands.sort(key=lambda x: x[0])
+    if cands:
+        t, ev, tr = cands[-1]
+        recent = tmin - t <= 2
+        k = ev["kind"]
+        first = ev["text"].splitlines()
+        body = "；".join(first)
+        if recent:
+            lab = {"入场": f"现在进 · {tr['dir_name']}", "不做": "信号出现 · 按仓位方案不做", "出场": "该走了", "砍": "该砍了",
+                   "加仓": "可以加仓", "走一半": "先走一半", "走出来": "挪止损到保本", "挪止损": "挪止损"}.get(k, k)
+            tone = {"入场": "go", "加仓": "go", "走一半": "go", "出场": "stop", "砍": "stop", "不做": "no"}.get(k, "wait")
+            return lab, tone, body
+        live = [x for x in strat["trades"] if x["state"] == "持仓中"]
+        if live:
+            tr = live[-1]
+            return f"持仓中 · {tr['dir_name']}", "wait", stratlive.describe(tr) + "。按选定的止损和止盈管，到了会提醒。"
+    names = "；".join(f"{'做多' if d == 'L' else '做空'}：{c['name']} + {c['stop_name']} + {c['tgt_name']}（{c['src']}）"
+                      for d, c in strat["choices"].items())
+    if any(x["state"] == "已出场" for x in strat.get("trades") or []):
+        done = [x for x in strat["trades"] if x["state"] == "已出场"]
+        if tmin > 660 or len(done) == len(strat["choices"]):
+            return "今天这笔结束了", "no", "；".join(stratlive.describe(x) for x in done)
+    if tmin > 660:
+        return "今天没出信号", "no", f"选定的策略（{names}）11:00 前没出信号：今天不做"
+    return "等信号", "wait", f"选定：{names}。还没出信号；出了会弹窗。"
+
+
+def set_strategy(d):
+    """盯盘界面改选定策略 / 仓位方案（只限本机）：写今天的纪律设置；锁定后必须写理由，记进修改记录。"""
+    import today
+    import stratlive
+    day = today.session_day()
+    p = today.folder(day) / "纪律设置.json"
+    if not p.exists():
+        raise ValueError("今天还没有纪律设置（盘前报告会建一份，或在 Claude 里说「开始今天」）")
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    locked = raw.get("状态") == "已锁定"
+    why = str(d.get("理由") or "").strip()
+    if locked and not why:
+        raise ValueError("纪律已经锁定：改策略或仓位要写理由（会记进修改记录）")
+    sn, tn, gn = stratlive.names()
+    changes = []
+    code = str(d.get("代码") or "").upper()
+    if code:
+        it = next((w for w in raw.get("观察名单") or [] if str(w.get("代码", "")).upper() == code), None)
+        if it is None:
+            raise ValueError(f"{code} 不在今天纪律设置的观察名单里")
+        if d.get("用预案"):
+            it.pop("策略", None)
+            changes.append(f"{code} 策略改回按预案")
+        else:
+            e, s, t = d.get("入场"), d.get("止损"), d.get("止盈")
+            if e not in sn or s not in tn or t not in gn:
+                raise ValueError("入场 / 止损 / 止盈 没选全")
+            it["策略"] = {"入场": e, "止损": s, "止盈": t}
+            changes.append(f"{code} 策略 → {sn[e]} + {tn[s]} + {gn[t]}")
+    if d.get("仓位方案"):
+        if d["仓位方案"] not in stratlive.SCHEME_NAMES:
+            raise ValueError("仓位方案不认识")
+        raw.setdefault("仓位", json.loads(json.dumps(stratlive.DEFAULT_POS)))["方案"] = d["仓位方案"]
+        changes.append(f"仓位方案 → {stratlive.SCHEME_NAMES[d['仓位方案']]}")
+    if not changes:
+        raise ValueError("没有要改的")
+    raw.setdefault("修改记录", []).append({"时间": f"{et_now():%H:%M}", "改了什么": "；".join(changes) + "（盯盘界面）",
+                                         "理由": why or "（草稿阶段，未写）"})
+    p.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    return dict(ok=True, changes=changes)
+
+
+def verdict(code, b, an, qb, plan, items, live, opt, flow, guard, strat=None):
     """返回 dict(label, tone, reason, grade, checks, chips)。tone：go 可以进 / wait 等 / no 不做 / stop 停手或认错。"""
     s = patterns.settings(cfg_all())
     a, r = an["atr"], an["refs"]
@@ -538,6 +645,9 @@ def verdict(code, b, an, qb, plan, items, live, opt, flow, guard):
     # ④ 时间
     if tmin < 576:
         return out("等", "wait", "开盘前 5 根不做：等第 6 根（9:35–9:36）收盘定 C1 方向")
+    sv = strat_verdict(strat, tmin)                     # ④½ 选定了策略：按选定的策略说（和策略提醒同一套）
+    if sv:
+        return out(*sv)
     if tmin > 660:
         return out("不开新仓", "no", "11:00 以后不开新仓；手上有仓按原来的止损和目标管")
     ph, d = st.get("phase"), st.get("dir")
@@ -642,6 +752,12 @@ class H(BaseHTTPRequestHandler):
         self._send(403, {"error": "只对本机和 Tailscale 共享的设备开放"})
         return False
 
+    def _local(self):
+        try:
+            return ipaddress.ip_address(self.client_address[0].split("%")[0]).is_loopback
+        except Exception:
+            return False
+
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         b = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False, default=lambda x: None if x != x else str(x)).encode("utf-8")
         self.send_response(code)
@@ -673,7 +789,9 @@ class H(BaseHTTPRequestHandler):
             elif u.path == "/api/list":
                 self._send(200, overview(q))
             elif u.path == "/api/detail":
-                self._send(200, detail((q.get("code") or ["QQQ"])[0].upper(), q))
+                res = detail((q.get("code") or ["QQQ"])[0].upper(), q)
+                res["can_edit"] = self._local()
+                self._send(200, res)
             elif u.path == "/api/pos":
                 import roll
                 self._send(200, roll.snapshot(LIVE.bars if market_open() else None))
@@ -701,6 +819,13 @@ class H(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get("Content-Length") or 0)
             d = json.loads(self.rfile.read(n) or b"{}")
+            if self.path == "/api/strategy":                 # 改选定策略：只限本机（共享给同事的设备不能改纪律）
+                if not self._local():
+                    return self._send(403, {"error": "只能在本机改策略"})
+                try:
+                    return self._send(200, set_strategy(d))
+                except ValueError as e:
+                    return self._send(400, {"error": str(e)})
             if self.path == "/api/watch":
                 import today
                 return self._send(200, {"watch": set_watch(today.session_day(), d.get("codes") or [])})

@@ -313,8 +313,9 @@ def signals(day_df, row, qqq_day, c2s):
 NONE = 10 ** 9
 
 
-def exits(day_df, vw, tmin, i, d, struct, atr, iv, prem_x, fib_a, fib_len, ph, pl):
-    """返回 (e, px, [(止损id, 止盈id, 出场下标, 出场价, 止盈不可用)])，股价层面；e 是成交那根。"""
+def exits(day_df, vw, tmin, i, d, struct, atr, iv, prem_x, fib_a, fib_len, ph, pl, want_hit=False):
+    """返回 (e, px, [(止损id, 止盈id, 出场下标, 出场价, 止盈不可用)])，股价层面；e 是成交那根。
+    want_hit=True 时每项多一个「真的碰到了止损 / 止盈 / 时间」（否则是拿到最后一根，盘中用来判断还在不在场）。"""
     o, h, l, c = (day_df[x].values for x in ("open", "high", "low", "close"))
     n = len(c)
     e = i + 1
@@ -414,7 +415,10 @@ def exits(day_df, vw, tmin, i, d, struct, atr, iv, prem_x, fib_a, fib_len, ph, p
                 x, p = kt, ft
             else:
                 x, p = ks, fs
-            res.append((sid, tid, e + x, float(p), tnone))
+            if want_hit:
+                res.append((sid, tid, e + x, float(p), tnone, not (ks == NONE and kt == NONE)))
+            else:
+                res.append((sid, tid, e + x, float(p), tnone))
     return e, px, res
 
 
