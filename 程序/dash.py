@@ -329,7 +329,7 @@ def detail(code, q):
     return dict(code=code, day=day, note=note, t=bars[-1][0], bars=bars, vwap=an["vwap"], atr=an["atr"],
                 levels=lv, marks=marks, box=an["box"],
                 lines=an["lines"], events=an["events"], ladder=an["ladder"], summary=an["summary"], verdict=vd, opt=opt, flow=flow, guard=guard, c2=an["c2"], plan_locked=(plan or {}).get("状态"),
-                strat=strat, strat_opts=strat_opts(code, pday) if strat is not None else None,
+                strat=strat, strat_opts=strat_opts(code, pday) if strat is not None else None, scorecard=card_info(code, str(pday)),
                 pos_scheme=((plan or {}).get("仓位") or {}).get("方案"), in_plan=code in items)
 
 
@@ -713,6 +713,33 @@ def set_strategy(d):
     return dict(ok=True, changes=changes)
 
 
+# ================================================================ 打分记录卡（scorecard.py）：进场前记一张，40 天后再定分值
+def card_info(code, day):
+    import scorecard
+    t = scorecard.load_tags(day)
+    return dict(tag=((t or {}).get("个股") or {}).get(code), tag_time=(t or {}).get("标记时间"), day=day,
+                cards=[c for c in scorecard.load_cards(day) if c.get("代码") == code][-6:], live=market_open(),
+                news=scorecard.MANUAL_NEWS, data=scorecard.MANUAL_DATA)
+
+
+def scorecard_add(d):
+    """盯盘界面「记一张」（只限本机、只在盘中）：你填的 + 程序在这一刻自动算的客观项。"""
+    import today
+    import scorecard
+    if not market_open():
+        raise ValueError("只在盘中（9:30–16:00）记：卡要留下单那一刻的情况")
+    day = str(today.session_day())
+    code = str(d.get("代码") or "").upper()
+    if not code:
+        raise ValueError("没有股票代码")
+    b = get_bars(code, day, None, True)
+    qb = get_bars("QQQ", day, None, True)
+    plan, items = plan_for(day)
+    r = refs(code, day)
+    auto = scorecard.auto_items(code, day, b, qb, plan, items, r["atr"], r["pc"])
+    return dict(ok=True, card=scorecard.add_card(day, code, d, auto))
+
+
 def verdict(code, b, an, qb, plan, items, live, opt, flow, guard, strat=None):
     """返回 dict(label, tone, reason, grade, checks, chips)。tone：go 可以进 / wait 等 / no 不做 / stop 停手或认错。"""
     s = patterns.settings(cfg_all())
@@ -953,6 +980,13 @@ class H(BaseHTTPRequestHandler):
                     return self._send(403, {"error": "只能在本机改策略"})
                 try:
                     return self._send(200, set_strategy(d))
+                except ValueError as e:
+                    return self._send(400, {"error": str(e)})
+            if self.path == "/api/scorecard":                # 打分卡：只限本机
+                if not self._local():
+                    return self._send(403, {"error": "只能在本机记打分卡"})
+                try:
+                    return self._send(200, scorecard_add(d))
                 except ValueError as e:
                     return self._send(400, {"error": str(e)})
             if self.path == "/api/watch":

@@ -179,6 +179,16 @@ def make_pack(cfg, log=print, want_brief=False):
             + f"\n完整预案：数据/今日/{day}/预案.md\n"
     except Exception as e:
         full = full.rstrip() + f"\n\n（今日预案没生成：{type(e).__name__}: {e}）\n"
+    try:                                               # 打分卡：开盘前留一份带时间的消息面标记（scorecard.py；9:30 后不覆盖）
+        import scorecard
+        import news
+        try:
+            quotes, _ = premarket_quotes(cfg)
+        except Exception:
+            quotes = {}
+        full = full.rstrip() + "\n\n" + scorecard.write_tags(cfg, day, [w["code"] for w in news.research(cfg)], quotes, log=None)
+    except Exception as e:
+        full = full.rstrip() + f"\n\n（消息面标记没生成：{type(e).__name__}: {e}）\n"
     save_text("盘前资料.md", full, day)
     p = folder(day) / "纪律设置.json"
     if not p.exists():

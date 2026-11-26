@@ -145,6 +145,7 @@ img.sim{width:100%;border-radius:8px;border:1px solid var(--line);margin-top:8px
   <section>
     <div id="vd" class="vd"><div class="small">载入中…</div></div>
     <div id="strat" class="card sec" style="margin-bottom:14px"></div>
+    <div id="score" class="card sec" style="margin-bottom:14px;display:none"></div>
     <div class="card">
       <div class="wrapc">
         <div class="title"><span class="small" id="tinfo"></span>
@@ -251,6 +252,9 @@ async function loadDetail() {
   if (!(window._stratOpen && document.activeElement && document.activeElement.closest && document.activeElement.closest("#stratEd"))) {
     const sh = stratHTML(); $("#strat").style.display = sh ? "" : "none"; $("#strat").innerHTML = sh ? `<h3>选定策略 · 入场和出场提醒</h3>${sh}` : ""; bindStrat();
   }
+  if (!(document.activeElement && document.activeElement.closest && document.activeElement.closest("#score"))) {
+    const sc = scoreHTML(); $("#score").style.display = sc ? "" : "none"; $("#score").innerHTML = sc; bindScore();
+  }
   $("#why").innerHTML = whyHTML(); $("#fo").innerHTML = foHTML();
   drawChart();
   $("#lines").innerHTML = DET.lines.map(x => `<div>${esc(x)}</div>`).join("");
@@ -295,6 +299,43 @@ function stratHTML() {
       <div class="small" id="sMsg"></div></details>`);
   }
   return L.join("");
+}
+// ================================================================ 打分记录卡（进场前记一张；分值 40 天后按真实结果定，现在不影响任何提醒）
+function scoreHTML() {
+  const S = DET.scorecard; if (!S) return "";
+  const L = [`<h3>进场前打分卡 <span class="small">（先记录，40 天后再按真实结果定每项几分；现在不加分、不改仓位）</span></h3>`];
+  const t = S.tag;
+  if (t) {
+    L.push(`<div class="small">开盘前自动标的消息面（关键词粗标，${esc(S.tag_time || "")}）：<b>${esc(t.label)}</b> · ${t.n} 条
+      ${t["盘前跳空_ATR"] != null ? ` · 盘前跳空 ${t["盘前跳空_ATR"] > 0 ? "+" : ""}${t["盘前跳空_ATR"]} 倍 ATR` : ""}</div>`);
+    for (const h of (t.heads || []).slice(0, 3)) L.push(`<div class="small" style="padding-left:10px">${esc(h.t)} ${esc(h.title)}
+      ${h.pos.length ? `<span class="ok">[${esc(h.pos.join("、"))}]</span>` : ""}${h.neg.length ? `<span class="err">[${esc(h.neg.join("、"))}]</span>` : ""}</div>`);
+  } else L.push(`<div class="small">${esc(S.day)} 没有开盘前的消息面标记（盘前报告跑过才有）。</div>`);
+  for (const c of S.cards || []) {
+    const a = c["自动"] || {};
+    L.push(`<div style="margin-top:6px">${esc(c["时间"].slice(11, 16))} <b>${esc(c["方向"])}</b> · 消息面 ${esc(c["消息面"])} · 数据面 ${esc(c["数据面"])}
+      <span class="small">· 自动：${esc(a["消息面自动"] || "—")}${a["离VWAP_ATR"] != null ? ` · 离 VWAP ${a["离VWAP_ATR"]} ATR` : ""}${a["名单"] ? " · " + esc(a["名单"]) : ""}${c["理由"] ? " · " + esc(c["理由"]) : ""}</span></div>`);
+  }
+  if (DET.can_edit && S.live && !replay.d) {
+    const K = window._kv || (window._kv = {}), kv = K[SEL] || {};
+    const sel = (id, arr) => `<select id="${id}"><option value="">—</option>${arr.map(x => `<option${kv[id] === x ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
+    L.push(`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px">方向 ${sel("kD", ["多", "空"])} 消息面 ${sel("kN", S.news)} 数据面 ${sel("kA", S.data)}</div>
+      <div style="display:flex;gap:6px;margin-top:6px"><input id="kW" placeholder="一句话理由（可以不写）" style="flex:1" maxlength="200" value="${esc(kv.kW || "")}"><button id="kSave">记一张</button></div>
+      <div class="small" id="kMsg">下单前点。现价、VWAP、QQQ、名单这些程序会自动记。</div>`);
+  } else if (!S.live) L.push(`<div class="small" style="margin-top:6px">盘中（9:30–16:00）才能记。</div>`);
+  return L.join("");
+}
+function bindScore() {
+  const b = $("#kSave"); if (!b) return;
+  const K = window._kv || (window._kv = {}), code = SEL;
+  for (const id of ["kD", "kN", "kA", "kW"]) { const el = $("#" + id); el.oninput = el.onchange = () => { (K[code] = K[code] || {})[id] = el.value; }; }
+  b.onclick = async () => {
+    try {
+      await api("/api/scorecard", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({代码: SEL, 方向: $("#kD").value, 消息面: $("#kN").value, 数据面: $("#kA").value, 理由: $("#kW").value})});
+      delete K[code]; document.activeElement && document.activeElement.blur && document.activeElement.blur(); loadDetail();
+    } catch (e) { $("#kMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  };
 }
 const GAPW = {big_down: "大幅低开", down: "低开", flat: "平开", up: "高开", big_up: "大幅高开"};
 async function saveStrat(body) {
